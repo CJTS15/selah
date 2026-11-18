@@ -9,7 +9,7 @@ use crate::Error;
 use crate::books::Section;
 use crate::import::{Book, Heading, HeadingKind, Meta, Verse};
 
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 
 const SCHEMA: &str = "
 CREATE TABLE meta    (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -21,7 +21,57 @@ CREATE TABLE verse   (book TEXT NOT NULL, chapter INTEGER NOT NULL, verse INTEGE
 CREATE TABLE heading (book TEXT NOT NULL, chapter INTEGER NOT NULL,
                       before_verse INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL);
 CREATE INDEX heading_chapter ON heading (book, chapter);
+CREATE VIRTUAL TABLE verse_fts USING fts5(text, content='verse', content_rowid='rowid',
+                      tokenize='unicode61 remove_diacritics 2');
 ";
+
+/// Marks the start of a match in [`SearchHit::snippet`].
+pub const MATCH_START: char = '\u{1}';
+/// Marks the end of a match in [`SearchHit::snippet`].
+pub const MATCH_END: char = '\u{2}';
+
+/// Which verses a search covers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Scope {
+    All,
+    Section(Section),
+    Book(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchHit {
+    pub book: String,
+    pub chapter: u32,
+    pub verse: u32,
+    /// Verse text, shortened around the match, with matches between
+    /// [`MATCH_START`] and [`MATCH_END`].
+    pub snippet: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchResults {
+    /// The first hits in Bible order, up to the requested limit.
+    pub hits: Vec<SearchHit>,
+    /// Number of matching verses per section, in Bible order.
+    pub counts: Vec<(Section, usize)>,
+}
+
+impl SearchResults {
+    pub fn total(&self) -> usize {
+        self.counts.iter().map(|(_, n)| n).sum()
+    }
+}
+
+/// Turns typed text into an FTS5 phrase query with the last word as a prefix:
+/// `everlasting li` -> `"everlasting li"*`. Only letters and digits survive, so
+/// user text can never act as FTS5 syntax. `None` if no words remain.
+pub fn fts_query(text: &str) -> Option<String> {
+    let words: Vec<&str> = text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    (!words.is_empty()).then(|| format!("\"{}\"*", words.join(" ")))
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BookInfo {
@@ -91,6 +141,7 @@ fn write(conn: &mut Connection, meta: &Meta, books: &[Book]) -> Result<(), Error
             }
         }
     }
+    tx.execute("INSERT INTO verse_fts (verse_fts) VALUES ('rebuild')", [])?;
     tx.commit()?;
     Ok(())
 }
@@ -157,6 +208,57 @@ impl Translation {
             Some(row) => Some(row.get(0)?),
             None => None,
         })
+    }
+
+    /// Verses matching `text` as a phrase (see [`fts_query`]) within `scope`.
+    pub fn search(&self, text: &str, scope: &Scope, limit: usize) -> Result<SearchResults, Error> {
+        let Some(query) = fts_query(text) else {
+            return Ok(SearchResults::default());
+        };
+        let (section, book) = match scope {
+            Scope::All => (None, None),
+            Scope::Section(section) => (Some(section.as_str()), None),
+            Scope::Book(book) => (None, Some(book.as_str())),
+        };
+        const FROM: &str = "FROM verse_fts JOIN verse v ON v.rowid = verse_fts.rowid
+             JOIN book b ON b.id = v.book
+             WHERE verse_fts MATCH ?1 AND (?2 IS NULL OR b.section = ?2)
+               AND (?3 IS NULL OR v.book = ?3)";
+
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT b.section, count(*) {FROM} GROUP BY b.section ORDER BY min(b.ord)"
+        ))?;
+        let mut rows = stmt.query(params![query, section, book])?;
+        let mut counts = Vec::new();
+        while let Some(row) = rows.next()? {
+            let section: String = row.get(0)?;
+            let count: i64 = row.get(1)?;
+            counts.push((
+                Section::parse(&section)
+                    .ok_or_else(|| Error::InvalidData(format!("section {section:?}")))?,
+                usize::try_from(count).unwrap_or(0),
+            ));
+        }
+
+        let limit = i64::try_from(limit).unwrap_or(i64::MAX);
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT v.book, v.chapter, v.verse,
+                    snippet(verse_fts, 0, char(1), char(2), '…', 48)
+             {FROM} ORDER BY b.ord, v.chapter, v.verse LIMIT ?4"
+        ))?;
+        let hits = stmt
+            .query_map(params![query, section, book, limit], |row| {
+                let snippet: String = row.get(3)?;
+                Ok(SearchHit {
+                    book: row.get(0)?,
+                    chapter: row.get(1)?,
+                    verse: row.get(2)?,
+                    // Words of a phrase are marked one by one; join them into one match.
+                    snippet: snippet.replace("\u{2} \u{1}", " "),
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        Ok(SearchResults { hits, counts })
     }
 
     /// Books in the translation's order, each with its chapter numbers.
@@ -236,6 +338,67 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         write(&mut conn, &meta, &books).unwrap();
         Translation::from_connection(conn).unwrap()
+    }
+
+    #[test]
+    fn fts_query_is_a_quoted_phrase() {
+        assert_eq!(
+            fts_query("everlasting li").as_deref(),
+            Some("\"everlasting li\"*")
+        );
+        assert_eq!(
+            fts_query("  \"NEAR(a b)\" OR c* ").as_deref(),
+            Some("\"NEAR a b OR c\"*")
+        );
+        assert_eq!(fts_query("¿?!").as_deref(), None);
+    }
+
+    #[test]
+    fn kjv_search() {
+        let kjv = kjv();
+        let found = kjv.search("everlasting life", &Scope::All, 200).unwrap();
+        assert_eq!(found.counts[0], (Section::OldTestament, 1), "only Dan 12:2");
+        assert_eq!(
+            (
+                found.hits[0].book.as_str(),
+                found.hits[0].chapter,
+                found.hits[0].verse
+            ),
+            ("DAN", 12, 2)
+        );
+        assert!(
+            found.hits[0].snippet.contains("\u{1}everlasting life\u{2}"),
+            "{}",
+            found.hits[0].snippet
+        );
+        assert_eq!(found.total(), found.hits.len());
+
+        let prefix = kjv.search("Everlasting LI", &Scope::All, 200).unwrap();
+        assert!(prefix.total() >= found.total());
+
+        let john = kjv
+            .search("begotten son", &Scope::Book("JHN".into()), 200)
+            .unwrap();
+        assert!(john.hits.iter().all(|h| h.book == "JHN"));
+        assert!(john.hits.iter().any(|h| (h.chapter, h.verse) == (3, 16)));
+
+        let nt = kjv
+            .search(
+                "everlasting life",
+                &Scope::Section(Section::NewTestament),
+                3,
+            )
+            .unwrap();
+        assert_eq!(nt.hits.len(), 3, "limited");
+        assert_eq!(nt.counts.len(), 1);
+        assert!(nt.total() > 3);
+
+        // Typed FTS5 syntax is treated as words, never as an expression.
+        assert!(kjv.search("\"NEAR( OR *", &Scope::All, 10).is_ok());
+        assert_eq!(
+            kjv.search("…", &Scope::All, 10).unwrap(),
+            SearchResults::default()
+        );
     }
 
     #[test]
