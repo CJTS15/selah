@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Selah
+Comment=Read the Bible offline
+# Translators: Search terms to find this application. Do NOT translate or localize the semicolons. The list MUST also end with a semicolon.
+Keywords=Bible;Scripture;Verse;
+Exec=selah
+Icon=@APP_ID@
+Terminal=false
+Type=Application
+Categories=Education;Literature;
+StartupNotify=true
