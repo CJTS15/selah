@@ -722,6 +722,7 @@ dependencies = [
  "gettext-rs",
  "gtk4",
  "libadwaita",
+ "selah-core",
 ]
 
 [[package]]
