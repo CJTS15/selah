@@ -124,7 +124,6 @@ mod imp {
                 },
             );
             klass.install_action("win.search", None, |win, _, _| win.open_search());
-            klass.install_action("win.close-search", None, |win, _, _| win.close_search());
             klass.install_action("win.zoom-in", None, |win, _, _| {
                 win.set_zoom(win.zoom() + ZOOM_STEP);
             });
