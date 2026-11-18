@@ -50,6 +50,7 @@ fn main() -> glib::ExitCode {
         &["<Control>plus", "<Control>equal", "<Control>KP_Add"],
     );
     app.set_accels_for_action("win.zoom-out", &["<Control>minus", "<Control>KP_Subtract"]);
+    app.set_accels_for_action("win.search", &["<Control>f", "<Control>l"]);
     app.set_accels_for_action("win.zoom-reset", &["<Control>0", "<Control>KP_0"]);
 
     app.run()

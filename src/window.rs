@@ -11,6 +11,8 @@ use selah_core::store::{self, BookInfo, Chapter, Translation};
 
 use crate::config;
 
+mod search;
+
 /// Reader font size at 100% zoom, in points (scaled by system text scaling).
 const BASE_POINTS: f64 = 13.0;
 const ZOOM_STEP: f64 = 0.1;
@@ -46,6 +48,20 @@ mod imp {
         #[template_child]
         pub reader_page: TemplateChild<adw::NavigationPage>,
         #[template_child]
+        pub content_stack: TemplateChild<gtk::Stack>,
+        #[template_child]
+        pub search_entry: TemplateChild<gtk::SearchEntry>,
+        #[template_child]
+        pub scope_bar: TemplateChild<gtk::ScrolledWindow>,
+        #[template_child]
+        pub scope_group: TemplateChild<adw::ToggleGroup>,
+        #[template_child]
+        pub book_toggle: TemplateChild<adw::Toggle>,
+        #[template_child]
+        pub search_stack: TemplateChild<gtk::Stack>,
+        #[template_child]
+        pub search_results: TemplateChild<gtk::Box>,
+        #[template_child]
         pub reader_title: TemplateChild<adw::WindowTitle>,
         #[template_child]
         pub reader_stack: TemplateChild<gtk::Stack>,
@@ -66,6 +82,10 @@ mod imp {
         pub expanded: Cell<Option<usize>>,
         /// Chapter button showing the current chapter.
         pub highlighted: RefCell<Option<gtk::Button>>,
+        /// Increases with every search so stale results can be dropped.
+        pub search_generation: Cell<u64>,
+        /// First activatable row in the search results, for the Down key.
+        pub first_result: RefCell<Option<gtk::ListBoxRow>>,
     }
 
     #[glib::object_subclass]
@@ -88,10 +108,23 @@ mod imp {
                 Some(&<(String, u32)>::static_variant_type()),
                 |win, _, param| {
                     if let Some((book, chapter)) = param.and_then(|p| p.get::<(String, u32)>()) {
-                        win.open_chapter_by_id(&book, chapter);
+                        win.open_chapter_by_id(&book, chapter, None);
                     }
                 },
             );
+            klass.install_action(
+                "win.open-verse",
+                Some(&<(String, u32, u32, u32)>::static_variant_type()),
+                |win, _, param| {
+                    if let Some((book, chapter, first, last)) =
+                        param.and_then(|p| p.get::<(String, u32, u32, u32)>())
+                    {
+                        win.open_chapter_by_id(&book, chapter, Some((first, last)));
+                    }
+                },
+            );
+            klass.install_action("win.search", None, |win, _, _| win.open_search());
+            klass.install_action("win.close-search", None, |win, _, _| win.close_search());
             klass.install_action("win.zoom-in", None, |win, _, _| {
                 win.set_zoom(win.zoom() + ZOOM_STEP);
             });
@@ -126,6 +159,7 @@ mod imp {
             obj.setup_text_tags();
             obj.apply_zoom();
             obj.setup_book_list();
+            obj.setup_search();
             obj.update_navigation();
 
             self.split_view.connect_collapsed_notify(glib::clone!(
@@ -638,14 +672,14 @@ impl SelahWindow {
                 .or_else(|| books.first()?.chapters.first().map(|&c| (0, c)))
         };
         if let Some((book, chapter)) = target {
-            self.open_chapter(book, chapter);
+            self.open_chapter(book, chapter, None);
         }
     }
 
-    fn open_chapter_by_id(&self, id: &str, chapter: u32) {
+    fn open_chapter_by_id(&self, id: &str, chapter: u32, verses: Option<(u32, u32)>) {
         let index = self.imp().books.borrow().iter().position(|b| b.id == id);
         if let Some(index) = index {
-            self.open_chapter(index, chapter);
+            self.open_chapter(index, chapter, verses);
         }
     }
 
@@ -655,16 +689,22 @@ impl SelahWindow {
             store::step_chapter(&imp.books.borrow(), book, chapter, forward)
         });
         if let Some((book, chapter)) = target {
-            self.open_chapter(book, chapter);
+            self.open_chapter(book, chapter, None);
         }
     }
 
-    fn open_chapter(&self, index: usize, chapter: u32) {
+    /// Opens a chapter, optionally scrolled to and selecting a range of verses.
+    fn open_chapter(&self, index: usize, chapter: u32, verses: Option<(u32, u32)>) {
         let imp = self.imp();
         let Some(book) = imp.books.borrow().get(index).cloned() else {
             return;
         };
         imp.current.set(Some((index, chapter)));
+        // A jump from the search page remembers what was searched.
+        if imp.content_stack.visible_child_name().as_deref() == Some("search") {
+            self.remember_search();
+        }
+        imp.content_stack.set_visible_child_name("reading");
         self.update_navigation();
         self.sync_sidebar();
         imp.split_view.set_show_content(true);
@@ -691,7 +731,7 @@ impl SelahWindow {
                     return;
                 }
                 match result {
-                    Ok(Ok(content)) => win.show_chapter(&book, chapter, &content),
+                    Ok(Ok(content)) => win.show_chapter(&book, chapter, &content, verses),
                     Ok(Err(err)) => win.show_error(&err.to_string()),
                     Err(panic) => std::panic::resume_unwind(panic),
                 }
@@ -715,12 +755,20 @@ impl SelahWindow {
         self.action_set_enabled("win.next-chapter", next);
     }
 
-    fn show_chapter(&self, book: &BookInfo, chapter: u32, content: &Chapter) {
+    fn show_chapter(
+        &self,
+        book: &BookInfo,
+        chapter: u32,
+        content: &Chapter,
+        verses: Option<(u32, u32)>,
+    ) {
         let imp = self.imp();
         let buffer = imp.text_view.buffer();
         buffer.set_text("");
         let mut end = buffer.end_iter();
         let mut first_line = true;
+        // Character offsets of the requested verses, for selection.
+        let mut selection: Option<(i32, i32)> = None;
         let heading_tags = |kind: HeadingKind| -> &'static [&'static str] {
             match kind {
                 HeadingKind::Title => &["title"],
@@ -749,10 +797,17 @@ impl SelahWindow {
             } else {
                 buffer.insert(&mut end, " ");
             }
+            let verse_start = end.offset();
             buffer.insert_with_tags_by_name(&mut end, &verse.verse.to_string(), &["verse-number"]);
             // Thin space between the number and the verse.
             buffer.insert(&mut end, "\u{2009}");
             buffer.insert(&mut end, &verse.text);
+            if let Some((first, last)) = verses
+                && (first..=last).contains(&verse.verse)
+            {
+                let start = selection.map_or(verse_start, |(start, _)| start);
+                selection = Some((start, end.offset()));
+            }
         }
         for heading in headings {
             new_line(&buffer, &mut end, &mut first_line);
@@ -765,7 +820,18 @@ impl SelahWindow {
         imp.reader_page.set_title(&title);
         imp.reader_title.set_title(&title);
         imp.reader_stack.set_visible_child_name("reader");
-        imp.scrolled.vadjustment().set_value(0.0);
+        match selection {
+            Some((start, end)) => {
+                let start = buffer.iter_at_offset(start);
+                buffer.select_range(&start, &buffer.iter_at_offset(end));
+                // select_range puts the insert mark at the verse start; GTK may
+                // defer this scroll until the new text has a layout.
+                imp.text_view
+                    .scroll_to_mark(&buffer.get_insert(), 0.0, true, 0.0, 0.2);
+                imp.text_view.grab_focus();
+            }
+            None => imp.scrolled.vadjustment().set_value(0.0),
+        }
     }
 
     fn show_error(&self, message: &str) {

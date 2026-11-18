@@ -35,5 +35,9 @@
       <default>"default"</default>
       <summary>Colour style: follow the system, light or dark</summary>
     </key>
+    <key name="recent-searches" type="as">
+      <default>[]</default>
+      <summary>Recent searches, newest first</summary>
+    </key>
   </schema>
 </schemalist>

@@ -3,3 +3,4 @@ data/selah.metainfo.xml.in.in
 data/ui/shortcuts-dialog.blp
 data/ui/window.blp
 src/window.rs
+src/window/search.rs

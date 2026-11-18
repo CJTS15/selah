@@ -180,85 +180,198 @@ template $SelahWindow: Adw.ApplicationWindow {
     content: Adw.NavigationPage reader_page {
       title: _("Reader");
 
-      child: Adw.ToolbarView {
-        [top]
-        Adw.HeaderBar reader_header {
-          // Replaces the back button on narrow widths, as in the phone mockup.
+      child: Stack content_stack {
+        StackPage {
+          name: "reading";
 
-          [start]
-          Button show_books_button {
-            visible: false;
-            icon-name: "sidebar-show-symbolic";
-            tooltip-text: _("Show Books");
-            action-name: "win.show-books";
+          child: Adw.ToolbarView {
+            [top]
+            Adw.HeaderBar reader_header {
+              // Replaces the back button on narrow widths, as in the phone mockup.
 
-            accessibility {
-              label: _("Show Books");
+              [start]
+              Button show_books_button {
+                visible: false;
+                icon-name: "sidebar-show-symbolic";
+                tooltip-text: _("Show Books");
+                action-name: "win.show-books";
+
+                accessibility {
+                  label: _("Show Books");
+                }
+              }
+
+              [start]
+              Button {
+                icon-name: "go-previous-symbolic";
+                tooltip-text: _("Previous Chapter");
+                action-name: "win.previous-chapter";
+
+                accessibility {
+                  label: _("Previous Chapter");
+                }
+              }
+
+              [start]
+              Button {
+                icon-name: "go-next-symbolic";
+                tooltip-text: _("Next Chapter");
+                action-name: "win.next-chapter";
+
+                accessibility {
+                  label: _("Next Chapter");
+                }
+              }
+
+              title-widget: Adw.WindowTitle reader_title {};
+
+              [end]
+              Button {
+                icon-name: "system-search-symbolic";
+                tooltip-text: _("Search");
+                action-name: "win.search";
+
+                accessibility {
+                  label: _("Search");
+                }
+              }
             }
-          }
 
-          [start]
-          Button {
-            icon-name: "go-previous-symbolic";
-            tooltip-text: _("Previous Chapter");
-            action-name: "win.previous-chapter";
+            content: Stack reader_stack {
+              StackPage {
+                name: "reader";
 
-            accessibility {
-              label: _("Previous Chapter");
-            }
-          }
+                child: ScrolledWindow scrolled {
+                  styles [
+                    "view",
+                  ]
 
-          [start]
-          Button {
-            icon-name: "go-next-symbolic";
-            tooltip-text: _("Next Chapter");
-            action-name: "win.next-chapter";
+                  hscrollbar-policy: never;
 
-            accessibility {
-              label: _("Next Chapter");
-            }
-          }
+                  child: Adw.ClampScrollable {
+                    maximum-size: 720;
 
-          title-widget: Adw.WindowTitle reader_title {};
+                    child: TextView text_view {
+                      editable: false;
+                      cursor-visible: false;
+                      wrap-mode: word_char;
+                      top-margin: 24;
+                      bottom-margin: 48;
+                      left-margin: 24;
+                      right-margin: 24;
+                      pixels-below-lines: 16;
+                    };
+                  };
+                };
+              }
+
+              StackPage {
+                name: "error";
+
+                child: Adw.StatusPage error_page {
+                  icon-name: "dialog-error-symbolic";
+                  title: _("Could Not Open the Bible");
+                };
+              }
+            };
+          };
         }
 
-        content: Stack reader_stack {
-          StackPage {
-            name: "reader";
+        StackPage {
+          name: "search";
 
-            child: ScrolledWindow scrolled {
-              styles [
-                "view",
-              ]
+          child: Adw.ToolbarView {
+            [top]
+            Adw.HeaderBar {
+              [start]
+              Button {
+                icon-name: "go-previous-symbolic";
+                tooltip-text: _("Close Search");
+                action-name: "win.close-search";
 
-              hscrollbar-policy: never;
+                accessibility {
+                  label: _("Close Search");
+                }
+              }
 
-              child: Adw.ClampScrollable {
-                maximum-size: 720;
+              title-widget: Adw.Clamp {
+                maximum-size: 480;
+                hexpand: true;
 
-                child: TextView text_view {
-                  editable: false;
-                  cursor-visible: false;
-                  wrap-mode: word_char;
-                  top-margin: 24;
-                  bottom-margin: 48;
-                  left-margin: 24;
-                  right-margin: 24;
-                  pixels-below-lines: 16;
+                child: SearchEntry search_entry {
+                  placeholder-text: _("Search or go to a reference");
+                  hexpand: true;
                 };
               };
-            };
-          }
+            }
 
-          StackPage {
-            name: "error";
+            [top]
+            ScrolledWindow scope_bar {
+              vscrollbar-policy: never;
+              propagate-natural-height: true;
 
-            child: Adw.StatusPage error_page {
-              icon-name: "dialog-error-symbolic";
-              title: _("Could Not Open the Bible");
+              child: Adw.ToggleGroup scope_group {
+                halign: center;
+                margin-start: 12;
+                margin-end: 12;
+                margin-bottom: 6;
+                active-name: "all";
+
+                Adw.Toggle {
+                  name: "all";
+                  label: _("Whole Bible");
+                }
+
+                Adw.Toggle {
+                  name: "ot";
+                  label: _("Old Testament");
+                }
+
+                Adw.Toggle {
+                  name: "nt";
+                  label: _("New Testament");
+                }
+
+                Adw.Toggle book_toggle {
+                  name: "book";
+                }
+              };
+            }
+
+            content: Stack search_stack {
+              StackPage {
+                name: "results";
+
+                child: ScrolledWindow {
+                  hscrollbar-policy: never;
+
+                  child: Adw.Clamp {
+                    maximum-size: 760;
+
+                    child: Box search_results {
+                      orientation: vertical;
+                      spacing: 6;
+                      margin-top: 12;
+                      margin-bottom: 24;
+                      margin-start: 12;
+                      margin-end: 12;
+                    };
+                  };
+                };
+              }
+
+              StackPage {
+                name: "empty";
+
+                child: Adw.StatusPage {
+                  icon-name: "system-search-symbolic";
+                  title: _("No Results");
+                  description: _("Try other words or check the spelling");
+                };
+              }
             };
-          }
-        };
+          };
+        }
       };
     };
   };
