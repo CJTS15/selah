@@ -95,6 +95,37 @@ fn write(conn: &mut Connection, meta: &Meta, books: &[Book]) -> Result<(), Error
     Ok(())
 }
 
+/// The chapter before or after `chapter` in `books[book]`, crossing into the
+/// neighbouring book at either end. `None` at the first or last chapter.
+pub fn step_chapter(
+    books: &[BookInfo],
+    book: usize,
+    chapter: u32,
+    forward: bool,
+) -> Option<(usize, u32)> {
+    let chapters = &books.get(book)?.chapters;
+    let pos = chapters.iter().position(|&c| c == chapter)?;
+    if forward {
+        if let Some(&next) = chapters.get(pos + 1) {
+            return Some((book, next));
+        }
+        books
+            .iter()
+            .enumerate()
+            .skip(book + 1)
+            .find_map(|(i, b)| b.chapters.first().map(|&c| (i, c)))
+    } else {
+        if pos > 0 {
+            return Some((book, chapters[pos - 1]));
+        }
+        books[..book]
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(i, b)| b.chapters.last().map(|&c| (i, c)))
+    }
+}
+
 pub struct Translation {
     conn: Connection,
 }
@@ -195,6 +226,31 @@ mod tests {
         let mut conn = Connection::open_in_memory().unwrap();
         write(&mut conn, &meta, &books).unwrap();
         Translation::from_connection(conn).unwrap()
+    }
+
+    #[test]
+    fn step_chapter_crosses_books() {
+        let book = |id: &str, chapters: Vec<u32>| BookInfo {
+            id: id.into(),
+            section: Section::OldTestament,
+            name: id.into(),
+            abbrev: id.into(),
+            chapters,
+        };
+        let books = [
+            book("MAL", vec![1, 2, 3, 4]),
+            book("ESG", vec![10, 11]),
+            book("MAT", vec![1]),
+        ];
+        assert_eq!(step_chapter(&books, 0, 4, true), Some((1, 10)));
+        assert_eq!(step_chapter(&books, 1, 10, true), Some((1, 11)));
+        assert_eq!(step_chapter(&books, 1, 11, true), Some((2, 1)));
+        assert_eq!(step_chapter(&books, 2, 1, true), None);
+        assert_eq!(step_chapter(&books, 2, 1, false), Some((1, 11)));
+        assert_eq!(step_chapter(&books, 1, 10, false), Some((0, 4)));
+        assert_eq!(step_chapter(&books, 0, 1, false), None);
+        assert_eq!(step_chapter(&books, 0, 9, true), None, "unknown chapter");
+        assert_eq!(step_chapter(&books, 7, 1, true), None, "unknown book");
     }
 
     #[test]

@@ -43,6 +43,8 @@ fn main() -> glib::ExitCode {
     app.add_action_entries([quit]);
     app.set_accels_for_action("app.quit", &["<Control>q"]);
     app.set_accels_for_action("window.close", &["<Control>w"]);
+    app.set_accels_for_action("win.previous-chapter", &["<Alt>Left"]);
+    app.set_accels_for_action("win.next-chapter", &["<Alt>Right"]);
 
     app.run()
 }
