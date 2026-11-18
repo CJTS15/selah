@@ -11,7 +11,8 @@ Crown under Letters Patent; see `copr.htm`.
 | Downloaded | 2026-11-18 |
 | Zip sha256 | `9d37aa78180ceefd5e4aeeaedceccf16f21484e5eb17d5662e8beff31bc3d8a5` |
 
-The `.usfm` files and `copr.htm` are unmodified from the zip. The front matter
+The `.usfm` files and `copr.htm` are unmodified from the zip. `meta.txt` is
+Selah's own metadata for the importer. The front matter
 (`00-FRTeng-kjv.usfm`) is left out because Selah does not display it.
 
 eBible.org replaces these files in place, so the text is vendored here rather
