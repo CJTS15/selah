@@ -149,6 +149,16 @@ impl Translation {
         Ok(Self { conn })
     }
 
+    /// A value from the translation's metadata, such as `name` or `licence`.
+    pub fn meta(&self, key: &str) -> Result<Option<String>, Error> {
+        let mut stmt = self.conn.prepare("SELECT value FROM meta WHERE key = ?1")?;
+        let mut rows = stmt.query(params![key])?;
+        Ok(match rows.next()? {
+            Some(row) => Some(row.get(0)?),
+            None => None,
+        })
+    }
+
     /// Books in the translation's order, each with its chapter numbers.
     pub fn books(&self) -> Result<Vec<BookInfo>, Error> {
         let mut chapters: HashMap<String, Vec<u32>> = HashMap::new();
@@ -272,7 +282,7 @@ mod tests {
                 for v in &chapter.verses {
                     assert!(!v.text.is_empty(), "{} {c}:{} is empty", book.id, v.verse);
                     assert!(
-                        !v.text.contains(['\\', '|']),
+                        !v.text.contains(['\\', '|', '¶']),
                         "{} {c}:{} has markup: {}",
                         book.id,
                         v.verse,
@@ -291,7 +301,7 @@ mod tests {
         let john3 = kjv.chapter("JHN", 3).unwrap();
         assert_eq!(
             john3.verses[15].text,
-            "¶ For God so loved the world, that he gave his only begotten Son, that whosoever \
+            "For God so loved the world, that he gave his only begotten Son, that whosoever \
              believeth in him should not perish, but have everlasting life."
         );
 
@@ -308,6 +318,17 @@ mod tests {
         assert_eq!(subscription.before_verse, 28, "after the last verse");
 
         assert_eq!(kjv.chapter("ESG", 10).unwrap().verses[0].verse, 4);
+        assert_eq!(
+            kjv.meta("name").unwrap().as_deref(),
+            Some("King James Version")
+        );
+        assert!(
+            kjv.meta("notice")
+                .unwrap()
+                .unwrap()
+                .contains("Letters Patent")
+        );
+        assert_eq!(kjv.meta("missing").unwrap(), None);
         assert!(kjv.chapter("GEN", 51).unwrap().verses.is_empty());
     }
 }

@@ -312,11 +312,12 @@ impl Parser {
         let name = self.name.or(self.short_name).unwrap_or_else(|| id.clone());
         let abbrev = self.abbrev.unwrap_or_else(|| name.clone());
 
+        // `¶` marks (KJV) duplicate the paragraph breaks already kept in `para`.
         for verse in &mut self.verses {
-            verse.text = collapse(&verse.text);
+            verse.text = collapse(&verse.text.replace('¶', ""));
         }
         for heading in &mut self.headings {
-            heading.text = collapse(&heading.text);
+            heading.text = collapse(&heading.text.replace('¶', ""));
         }
         self.headings.retain(|heading| !heading.text.is_empty());
 
@@ -356,7 +357,7 @@ mod tests {
 \q1
 \v 1 \nd \+w LORD|strong="H3068"\+w*\nd*, how are they \w increased|strong="H7231"\w*! many \add are\add* they.
 \q1
-\v 2 Many \add there be\add* which say\f + \fr 3.2 \ft Or, of my soul\f*.
+\v 2 ¶ Many \add there be\add* which say\f + \fr 3.2 \ft Or, of my soul\f*.
 "#;
 
     #[test]
