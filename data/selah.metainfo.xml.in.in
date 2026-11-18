@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>@APP_ID@</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Selah</name>
+  <summary>Read the Bible offline</summary>
+  <description>
+    <p>
+      Selah is a local-first Bible reader. It works offline from the first
+      launch and keeps your notes on your device.
+    </p>
+  </description>
+  <developer id="io.github.cjts15">
+    <name translate="no">CJTS15</name>
+  </developer>
+  <launchable type="desktop-id">@APP_ID@.desktop</launchable>
+  <translation type="gettext">@GETTEXT_PACKAGE@</translation>
+  <url type="homepage">https://github.com/CJTS15/selah</url>
+  <url type="bugtracker">https://github.com/CJTS15/selah/issues</url>
+  <url type="vcs-browser">https://github.com/CJTS15/selah</url>
+  <content_rating type="oars-1.1"/>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+</component>

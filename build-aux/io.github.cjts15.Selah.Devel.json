@@ -1,0 +1,44 @@
+{
+  "id": "io.github.cjts15.Selah.Devel",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "51",
+  "sdk": "org.gnome.Sdk",
+  "sdk-extensions": ["org.freedesktop.Sdk.Extension.rust-stable"],
+  "command": "selah",
+  "finish-args": [
+    "--share=ipc",
+    "--socket=fallback-x11",
+    "--socket=wayland",
+    "--device=dri"
+  ],
+  "build-options": {
+    "append-path": "/usr/lib/sdk/rust-stable/bin",
+    "env": {
+      "CARGO_HOME": "/run/build/selah/cargo",
+      "CARGO_NET_OFFLINE": "true",
+      "RUST_BACKTRACE": "1"
+    }
+  },
+  "cleanup": [
+    "/include",
+    "/lib/pkgconfig",
+    "/share/man",
+    "*.a",
+    "*.la"
+  ],
+  "modules": [
+    {
+      "name": "selah",
+      "buildsystem": "meson",
+      "config-opts": ["-Dprofile=development"],
+      "sources": [
+        {
+          "type": "dir",
+          "path": "..",
+          "skip": ["_build", "build-dir", "repo", ".flatpak-builder", "target"]
+        },
+        "cargo-sources.json"
+      ]
+    }
+  ]
+}

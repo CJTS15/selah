@@ -1,0 +1,36 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $SelahWindow: Adw.ApplicationWindow {
+  title: _("Selah");
+  width-request: 360;
+  height-request: 294;
+
+  Adw.Breakpoint {
+    condition ("max-width: 400sp")
+
+    setters {
+      split_view.collapsed: true;
+    }
+  }
+
+  content: Adw.NavigationSplitView split_view {
+    sidebar: Adw.NavigationPage {
+      title: _("Books");
+
+      child: Adw.ToolbarView {
+        [top]
+        Adw.HeaderBar {}
+      };
+    };
+
+    content: Adw.NavigationPage {
+      title: _("Reader");
+
+      child: Adw.ToolbarView {
+        [top]
+        Adw.HeaderBar {}
+      };
+    };
+  };
+}
