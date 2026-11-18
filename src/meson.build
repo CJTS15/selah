@@ -19,18 +19,23 @@ cargo_env = [
   'PROFILE=' + get_option('profile'),
 ]
 
-custom_target(
+# Builds the app and selah-import; only the app is installed. data/ runs
+# selah-import to create the bundled translation database.
+cargo_build = custom_target(
   'cargo-build',
   build_by_default: true,
   build_always_stale: true,
-  output: meson.project_name(),
+  output: [meson.project_name(), 'selah-import'],
   console: true,
   install: true,
-  install_dir: get_option('bindir'),
+  install_dir: [get_option('bindir'), false],
   command: [
     'env', cargo_env,
-    cargo, 'build', cargo_options,
+    cargo, 'build', '--workspace', cargo_options,
     '&&',
-    'cp', 'src' / rust_target / meson.project_name(), '@OUTPUT@',
+    'cp', 'src' / rust_target / meson.project_name(), '@OUTPUT0@',
+    '&&',
+    'cp', 'src' / rust_target / 'selah-import', '@OUTPUT1@',
   ],
 )
+selah_import = cargo_build[1]

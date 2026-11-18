@@ -7,7 +7,7 @@ template $SelahWindow: Adw.ApplicationWindow {
   height-request: 294;
 
   Adw.Breakpoint {
-    condition ("max-width: 400sp")
+    condition ("max-width: 600sp")
 
     setters {
       split_view.collapsed: true;
@@ -21,15 +21,88 @@ template $SelahWindow: Adw.ApplicationWindow {
       child: Adw.ToolbarView {
         [top]
         Adw.HeaderBar {}
+
+        content: ScrolledWindow {
+          hscrollbar-policy: never;
+
+          child: Box books_box {
+            orientation: vertical;
+            spacing: 18;
+            margin-top: 12;
+            margin-bottom: 12;
+            margin-start: 12;
+            margin-end: 12;
+          };
+        };
       };
     };
 
-    content: Adw.NavigationPage {
+    content: Adw.NavigationPage reader_page {
       title: _("Reader");
 
       child: Adw.ToolbarView {
         [top]
-        Adw.HeaderBar {}
+        Adw.HeaderBar {
+          [end]
+          Box {
+            spacing: 6;
+
+            Button {
+              icon-name: "go-previous-symbolic";
+              tooltip-text: _("Previous Chapter");
+              action-name: "win.previous-chapter";
+
+              accessibility {
+                label: _("Previous Chapter");
+              }
+            }
+
+            Button {
+              icon-name: "go-next-symbolic";
+              tooltip-text: _("Next Chapter");
+              action-name: "win.next-chapter";
+
+              accessibility {
+                label: _("Next Chapter");
+              }
+            }
+          }
+        }
+
+        content: Stack reader_stack {
+          StackPage {
+            name: "reader";
+
+            child: ScrolledWindow scrolled {
+              hscrollbar-policy: never;
+
+              child: Adw.ClampScrollable {
+                maximum-size: 720;
+
+                child: TextView text_view {
+                  editable: false;
+                  cursor-visible: false;
+                  wrap-mode: word_char;
+                  top-margin: 24;
+                  bottom-margin: 24;
+                  left-margin: 18;
+                  right-margin: 18;
+                  pixels-below-lines: 12;
+                  pixels-inside-wrap: 4;
+                };
+              };
+            };
+          }
+
+          StackPage {
+            name: "error";
+
+            child: Adw.StatusPage error_page {
+              icon-name: "dialog-error-symbolic";
+              title: _("Could Not Open the Bible");
+            };
+          }
+        };
       };
     };
   };

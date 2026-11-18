@@ -1,0 +1,6 @@
+id=eng-kjv
+name=King James Version
+language=en
+direction=ltr
+licence=Public Domain
+attribution=Courtesy of the CrossWire Bible Society and eBible.org.

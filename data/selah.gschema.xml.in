@@ -13,5 +13,13 @@
       <default>false</default>
       <summary>Window maximized state</summary>
     </key>
+    <key name="last-book" type="s">
+      <default>"GEN"</default>
+      <summary>Book of the last chapter read</summary>
+    </key>
+    <key name="last-chapter" type="u">
+      <default>1</default>
+      <summary>Last chapter read</summary>
+    </key>
   </schema>
 </schemalist>
