@@ -51,12 +51,20 @@ template $SelahWindow: Adw.ApplicationWindow {
               icon-name: "go-previous-symbolic";
               tooltip-text: _("Previous Chapter");
               action-name: "win.previous-chapter";
+
+              accessibility {
+                label: _("Previous Chapter");
+              }
             }
 
             Button {
               icon-name: "go-next-symbolic";
               tooltip-text: _("Next Chapter");
               action-name: "win.next-chapter";
+
+              accessibility {
+                label: _("Next Chapter");
+              }
             }
           }
         }

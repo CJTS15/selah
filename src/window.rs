@@ -397,6 +397,7 @@ impl SelahWindow {
     }
 
     fn show_error(&self, message: &str) {
+        glib::g_warning!("selah", "{message}");
         let imp = self.imp();
         // The description is markup; the message may contain paths.
         imp.error_page
