@@ -25,3 +25,9 @@ rustc-ice-*.txt
 
 # Local plans
 /docs/*
+
+# Meson and Flatpak build output
+/_build/
+/build-dir/
+/repo/
+/.flatpak-builder/
