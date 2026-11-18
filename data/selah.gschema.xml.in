@@ -21,5 +21,19 @@
       <default>1</default>
       <summary>Last chapter read</summary>
     </key>
+    <key name="text-scale" type="d">
+      <range min="0.5" max="3.0"/>
+      <default>1.0</default>
+      <summary>Reader text size as a multiple of the default</summary>
+    </key>
+    <key name="style" type="s">
+      <choices>
+        <choice value="default"/>
+        <choice value="light"/>
+        <choice value="dark"/>
+      </choices>
+      <default>"default"</default>
+      <summary>Colour style: follow the system, light or dark</summary>
+    </key>
   </schema>
 </schemalist>

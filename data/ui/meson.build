@@ -1,6 +1,6 @@
 blueprints = custom_target(
   'blueprints',
-  input: files('window.blp'),
+  input: files('shortcuts-dialog.blp', 'window.blp'),
   output: '.',
   command: [
     find_program('blueprint-compiler'),

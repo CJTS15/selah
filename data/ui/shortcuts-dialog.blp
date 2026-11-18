@@ -1,0 +1,52 @@
+using Gtk 4.0;
+using Adw 1;
+
+Adw.ShortcutsDialog shortcuts_dialog {
+  Adw.ShortcutsSection {
+    title: _("Reading");
+
+    Adw.ShortcutsItem {
+      title: _("Previous Chapter");
+      action-name: "win.previous-chapter";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Next Chapter");
+      action-name: "win.next-chapter";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Zoom In");
+      action-name: "win.zoom-in";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Zoom Out");
+      action-name: "win.zoom-out";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Reset Zoom");
+      action-name: "win.zoom-reset";
+    }
+  }
+
+  Adw.ShortcutsSection {
+    title: _("General");
+
+    Adw.ShortcutsItem {
+      title: _("Keyboard Shortcuts");
+      action-name: "app.shortcuts";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Close Window");
+      action-name: "window.close";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Quit");
+      action-name: "app.quit";
+    }
+  }
+}
