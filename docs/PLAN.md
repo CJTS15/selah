@@ -6,7 +6,7 @@ Last updated 2026-11-18. The full design is in [DESIGN.md](DESIGN.md).
 
 | Topic | Decision |
 | --- | --- |
-| Name | **Selah** (was Biblia on 2026-11-17, switched back 2026-11-18). App ID `io.github.cjts15.Selah`, crate `selah-core`, catalog repo `selah-catalog`. |
+| Name | **Selah**, final as of 2026-11-18 (briefly Biblia on 2026-11-17). App ID `io.github.cjts15.Selah`, crate `selah-core`, catalog repo `selah-catalog`. |
 | Tagline | "Selah: a local-first Bible for GNOME". AppStream summary: "Read the Bible offline". |
 | Stack | Rust, gtk4-rs + libadwaita-rs, Blueprint, plain gtk-rs subclassing, SQLite + FTS5, Meson, Flatpak/Flathub. |
 | Platform | GNOME 51 runtime (`org.gnome.Platform//51`); dev machine Fedora 45. |
@@ -21,11 +21,15 @@ Last updated 2026-11-18. The full design is in [DESIGN.md](DESIGN.md).
 
 ## Open items
 
-- [ ] **Name clash.** Another Bible app already uses "Selah". Check Flathub, GitHub and app stores, and decide before Phase 7. Keep the name centralised so a rename stays cheap.
-- [ ] **Mockups say "Biblia".** Rename to Selah in the design canvas (claude.ai artifact from 2026-11-17: 9 screens, light/dark, desktop/phone) and export screenshots into `docs/mockups/`.
+- [x] ~~Mockups say "Biblia".~~ Renamed to Selah on 2026-11-18 (design canvas, 9 screens, light/dark, desktop/phone).
+- [ ] Export mockup screenshots into `docs/mockups/` so they live with the code.
 - [ ] Confirm the GTK version in `org.gnome.Sdk//51` and pick the matching `gtk4` crate feature.
 - [ ] Decide SQLite source: runtime system SQLite vs `rusqlite` `bundled` (FTS5 must be enabled).
 - [ ] Icon brief and app icon (plus symbolic icon) for GNOME Circle.
+
+## Risks
+
+- **Name clash.** Another Bible app already uses "Selah". The name is decided; this stays as a risk for Flathub review and user confusion. Keep the name centralised (`meson.build` + app ID) so a rename stays cheap. Full risk table in DESIGN.md §14.
 
 ## Phase 0: scaffold
 
@@ -98,7 +102,7 @@ Last updated 2026-11-18. The full design is in [DESIGN.md](DESIGN.md).
 
 ## Phase 7: Flathub
 
-- [ ] Resolve the name clash.
+- [ ] Re-check the name-clash risk (see Risks) before submitting.
 - [ ] Final icon.
 - [ ] Tagged release, release notes in metainfo.
 - [ ] Submit to Flathub (follow the current submission docs and linter).

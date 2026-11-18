@@ -230,8 +230,8 @@ hard size cap before unpacking.
 
 ## 10. UI and HIG
 
-Mockups (9 screens, light and dark, desktop and phone) exist from 2026-11-17.
-They still say "Biblia" and need renaming to Selah.
+Mockups (9 screens, light and dark, desktop and phone) exist from 2026-11-17,
+renamed to Selah on 2026-11-18.
 
 - **Desktop:** `AdwNavigationSplitView`. Sidebar: header with the search entry,
   `AdwToggleGroup` Books | Saved. Content: reader in an `AdwToolbarView` with
@@ -298,7 +298,7 @@ maintained.
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Name clash: another Bible app uses "Selah" | Flathub review friction, user confusion | Check Flathub, GitHub and app stores before Phase 7; keep the name in one place (`meson.build` + app ID) so a rename is cheap. |
+| Name clash: another Bible app uses "Selah" | Flathub review friction, user confusion | Name is decided (2026-11-18). Re-check Flathub before Phase 7; keep the name in one place (`meson.build` + app ID) so a rename is cheap. |
 | Translation licensing | Takedown, Flathub rejection | Allowlist of licences in `selah-catalog`; licence shown per translation; never host copyrighted texts. |
 | KJV Crown copyright in the UK | Legal note required | Shown in About; WEB as fallback bundled text. |
 | Versification mapping errors | Annotations attached to wrong verses | Use established mapping data, store canonically, test with known divergent passages (Ps titles, Mal 4, Joel 2–3, 3 John 14–15, Dan 3 additions). |

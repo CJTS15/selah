@@ -69,5 +69,5 @@ desktop file still validate.
 
 ## Open items
 
-See "Open items" in docs/PLAN.md, notably the **Selah name clash** with
-another Bible app and the mockups that still say "Biblia".
+See "Open items" and "Risks" in docs/PLAN.md. The name Selah is final; the
+clash with another Bible app called Selah is tracked as a risk only.
