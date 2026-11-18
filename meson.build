@@ -28,8 +28,9 @@ gettext_package = meson.project_name()
 localedir = get_option('prefix') / get_option('localedir')
 pkgdatadir = get_option('prefix') / get_option('datadir') / meson.project_name()
 
-subdir('data')
+# src/ first: data/ uses the importer it builds.
 subdir('src')
+subdir('data')
 subdir('po')
 
 gnome.post_install(

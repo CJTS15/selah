@@ -55,6 +55,7 @@ test(
 )
 
 subdir('icons')
+subdir('translations')
 subdir('ui')
 
 gnome.compile_resources(
