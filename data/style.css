@@ -1,0 +1,52 @@
+/* Style switcher in the main menu: three round swatches. */
+.style-switcher checkbutton {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 9999px;
+  box-shadow: inset 0 0 0 1px alpha(currentColor, 0.2);
+}
+
+/* Grouped check buttons draw a radio indicator; the ring shows the choice instead. */
+.style-switcher checkbutton radio,
+.style-switcher checkbutton check {
+  opacity: 0;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.style-switcher checkbutton:checked {
+  box-shadow: inset 0 0 0 3px var(--accent-bg-color);
+}
+
+/* The swatches show the styles themselves, so fixed colours are intended. */
+.style-switcher checkbutton.follow {
+  background-image: linear-gradient(to bottom right, #ffffff 50%, #222226 50%);
+}
+
+.style-switcher checkbutton.light {
+  background-color: #ffffff;
+}
+
+.style-switcher checkbutton.dark {
+  background-color: #222226;
+}
+
+/* "In this translation" next to the Deuterocanon heading. */
+.section-badge {
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background-color: alpha(currentColor, 0.1);
+  font-size: smaller;
+  font-weight: bold;
+}
+
+.chapter-grid button {
+  font-weight: normal;
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+}

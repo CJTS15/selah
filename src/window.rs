@@ -1,9 +1,9 @@
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::path::PathBuf;
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
-use gettextrs::gettext;
+use gettextrs::{gettext, ngettext};
 use gtk::{gio, glib, pango};
 use selah_core::books::Section;
 use selah_core::import::HeadingKind;
@@ -11,18 +11,42 @@ use selah_core::store::{self, BookInfo, Chapter, Translation};
 
 use crate::config;
 
+/// Reader font size at 100% zoom, in points (scaled by system text scaling).
+const BASE_POINTS: f64 = 13.0;
+const ZOOM_STEP: f64 = 0.1;
+// Matches the range of the `text-scale` key.
+const ZOOM_MIN: f64 = 0.5;
+const ZOOM_MAX: f64 = 3.0;
+const GRID_COLUMNS: i32 = 6;
+
 mod imp {
     use super::*;
 
-    #[derive(Debug, gtk::CompositeTemplate)]
+    #[derive(Debug, Default, gtk::CompositeTemplate)]
     #[template(resource = "/io/github/cjts15/Selah/ui/window.ui")]
     pub struct SelahWindow {
         #[template_child]
         pub split_view: TemplateChild<adw::NavigationSplitView>,
         #[template_child]
-        pub books_box: TemplateChild<gtk::Box>,
+        pub sidebar_title: TemplateChild<adw::WindowTitle>,
+        #[template_child]
+        pub style_follow: TemplateChild<gtk::CheckButton>,
+        #[template_child]
+        pub style_light: TemplateChild<gtk::CheckButton>,
+        #[template_child]
+        pub style_dark: TemplateChild<gtk::CheckButton>,
+        #[template_child]
+        pub zoom_label: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub book_filter: TemplateChild<gtk::SearchEntry>,
+        #[template_child]
+        pub book_scroller: TemplateChild<gtk::ScrolledWindow>,
+        #[template_child]
+        pub book_list: TemplateChild<gtk::ListBox>,
         #[template_child]
         pub reader_page: TemplateChild<adw::NavigationPage>,
+        #[template_child]
+        pub reader_title: TemplateChild<adw::WindowTitle>,
         #[template_child]
         pub reader_stack: TemplateChild<gtk::Stack>,
         #[template_child]
@@ -31,27 +55,17 @@ mod imp {
         pub text_view: TemplateChild<gtk::TextView>,
         #[template_child]
         pub error_page: TemplateChild<adw::StatusPage>,
-        pub settings: gio::Settings,
+        pub settings: OnceCell<gio::Settings>,
         pub books: RefCell<Vec<BookInfo>>,
+        pub translation_name: RefCell<String>,
+        /// Licence, attribution and notice shown in About.
+        pub translation_legal: RefCell<String>,
         /// Book index and chapter most recently requested.
         pub current: Cell<Option<(usize, u32)>>,
-    }
-
-    impl Default for SelahWindow {
-        fn default() -> Self {
-            Self {
-                split_view: TemplateChild::default(),
-                books_box: TemplateChild::default(),
-                reader_page: TemplateChild::default(),
-                reader_stack: TemplateChild::default(),
-                scrolled: TemplateChild::default(),
-                text_view: TemplateChild::default(),
-                error_page: TemplateChild::default(),
-                settings: gio::Settings::new(config::APP_ID),
-                books: RefCell::default(),
-                current: Cell::default(),
-            }
-        }
+        /// Book whose chapter grid is open in the sidebar.
+        pub expanded: Cell<Option<usize>>,
+        /// Chapter button showing the current chapter.
+        pub highlighted: RefCell<Option<gtk::Button>>,
     }
 
     #[glib::object_subclass]
@@ -78,6 +92,17 @@ mod imp {
                     }
                 },
             );
+            klass.install_action("win.zoom-in", None, |win, _, _| {
+                win.set_zoom(win.zoom() + ZOOM_STEP);
+            });
+            klass.install_action("win.zoom-out", None, |win, _, _| {
+                win.set_zoom(win.zoom() - ZOOM_STEP);
+            });
+            klass.install_action("win.zoom-reset", None, |win, _, _| win.set_zoom(1.0));
+            klass.install_action("win.about", None, |win, _, _| win.show_about());
+            klass.install_action("win.show-books", None, |win, _, _| {
+                win.imp().split_view.set_show_content(false);
+            });
         }
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -88,14 +113,40 @@ mod imp {
     impl ObjectImpl for SelahWindow {
         fn constructed(&self) {
             self.parent_constructed();
+            self.settings
+                .set(gio::Settings::new(config::APP_ID))
+                .expect("settings are set once");
 
             let obj = self.obj();
             if config::PROFILE == "development" {
                 obj.add_css_class("devel");
             }
             obj.load_window_size();
+            obj.setup_style();
             obj.setup_text_tags();
+            obj.apply_zoom();
+            obj.setup_book_list();
             obj.update_navigation();
+
+            self.split_view.connect_collapsed_notify(glib::clone!(
+                #[weak]
+                obj,
+                move |_| obj.update_sidebar_subtitle()
+            ));
+            // On narrow widths the book list is hidden while reading; bring the
+            // current book into view whenever it is shown again.
+            self.split_view.connect_show_content_notify(glib::clone!(
+                #[weak]
+                obj,
+                move |split_view| {
+                    if !split_view.shows_content()
+                        && let Some((book, _)) = obj.imp().current.get()
+                    {
+                        obj.scroll_to_book(book);
+                    }
+                }
+            ));
+
             obj.load_books();
         }
     }
@@ -126,12 +177,35 @@ fn translation_path() -> PathBuf {
     PathBuf::from(config::PKGDATADIR).join("translations/eng-kjv/translation.sqlite")
 }
 
-fn section_title(section: Section) -> String {
-    match section {
+fn section_header(section: Section) -> gtk::Widget {
+    let title = match section {
         Section::OldTestament => gettext("Old Testament"),
         Section::NewTestament => gettext("New Testament"),
         Section::Deuterocanon => gettext("Deuterocanon"),
+    };
+    let header = gtk::Box::builder()
+        .spacing(6)
+        .margin_top(12)
+        .margin_bottom(3)
+        .margin_start(12)
+        .margin_end(12)
+        .build();
+    header.append(
+        &gtk::Label::builder()
+            .label(title)
+            .xalign(0.0)
+            .css_classes(["caption-heading", "dimmed"])
+            .build(),
+    );
+    if section == Section::Deuterocanon {
+        header.append(
+            &gtk::Label::builder()
+                .label(gettext("In this translation"))
+                .css_classes(["section-badge", "dimmed"])
+                .build(),
+        );
     }
+    header.upcast()
 }
 
 /// Starts a new line unless nothing has been written yet.
@@ -147,8 +221,15 @@ impl SelahWindow {
         glib::Object::builder().property("application", app).build()
     }
 
+    fn settings(&self) -> &gio::Settings {
+        self.imp()
+            .settings
+            .get()
+            .expect("settings are set in constructed")
+    }
+
     fn save_window_size(&self) -> Result<(), glib::BoolError> {
-        let settings = &self.imp().settings;
+        let settings = self.settings();
         let (width, height) = self.default_size();
         settings.set_int("window-width", width)?;
         settings.set_int("window-height", height)?;
@@ -157,25 +238,357 @@ impl SelahWindow {
     }
 
     fn load_window_size(&self) {
-        let settings = &self.imp().settings;
+        let settings = self.settings();
         self.set_default_size(settings.int("window-width"), settings.int("window-height"));
         if settings.boolean("is-maximized") {
             self.maximize();
         }
     }
 
+    fn setup_style(&self) {
+        let imp = self.imp();
+        let apply = |style: &str| {
+            adw::StyleManager::default().set_color_scheme(match style {
+                "light" => adw::ColorScheme::ForceLight,
+                "dark" => adw::ColorScheme::ForceDark,
+                _ => adw::ColorScheme::Default,
+            });
+        };
+
+        let style = self.settings().string("style");
+        apply(&style);
+        match style.as_str() {
+            "light" => imp.style_light.set_active(true),
+            "dark" => imp.style_dark.set_active(true),
+            _ => imp.style_follow.set_active(true),
+        }
+
+        for (button, value) in [
+            (&*imp.style_follow, "default"),
+            (&*imp.style_light, "light"),
+            (&*imp.style_dark, "dark"),
+        ] {
+            let settings = self.settings().clone();
+            button.connect_toggled(move |button| {
+                if button.is_active() {
+                    apply(value);
+                    if let Err(err) = settings.set_string("style", value) {
+                        glib::g_warning!("selah", "Failed to save style: {err}");
+                    }
+                }
+            });
+        }
+    }
+
     fn setup_text_tags(&self) {
         let buffer = self.imp().text_view.buffer();
+        // Later tags take priority, so the base "body" tag comes first. Pango's
+        // line-height multiplies the font's own line height (about 1.36 em for Noto Serif).
         buffer.create_tag(
-            Some("verse-number"),
-            &[
-                ("scale", &0.7_f64),
-                ("rise", &(5 * pango::SCALE)),
-                ("weight", &700_i32),
-            ],
+            Some("body"),
+            &[("family", &"Noto Serif"), ("line-height", &1.35_f32)],
         );
+        buffer.create_tag(Some("verse-number"), &[]);
         buffer.create_tag(Some("section"), &[("weight", &700_i32)]);
         buffer.create_tag(Some("title"), &[("style", &pango::Style::Italic)]);
+    }
+
+    fn zoom(&self) -> f64 {
+        self.settings().double("text-scale")
+    }
+
+    fn set_zoom(&self, scale: f64) {
+        // Round to whole steps so repeated changes do not drift.
+        let scale = ((scale / ZOOM_STEP).round() * ZOOM_STEP).clamp(ZOOM_MIN, ZOOM_MAX);
+        if let Err(err) = self.settings().set_double("text-scale", scale) {
+            glib::g_warning!("selah", "Failed to save text size: {err}");
+        }
+        self.apply_zoom();
+    }
+
+    fn apply_zoom(&self) {
+        let imp = self.imp();
+        let scale = self.zoom();
+        let points = BASE_POINTS * scale;
+        let tags = imp.text_view.buffer().tag_table();
+        if let Some(body) = tags.lookup("body") {
+            body.set_size_points(points);
+        }
+        if let Some(number) = tags.lookup("verse-number") {
+            number.set_size_points(points * 0.6);
+            number.set_rise((points * 0.45 * f64::from(pango::SCALE)) as i32);
+        }
+        imp.zoom_label
+            .set_label(&format!("{}%", (scale * 100.0).round()));
+        self.action_set_enabled("win.zoom-out", scale > ZOOM_MIN + f64::EPSILON);
+        self.action_set_enabled("win.zoom-in", scale < ZOOM_MAX - f64::EPSILON);
+        self.action_set_enabled("win.zoom-reset", (scale - 1.0).abs() > f64::EPSILON);
+    }
+
+    fn setup_book_list(&self) {
+        let imp = self.imp();
+        // Row 2n is book n; row 2n + 1 holds its chapter grid.
+        imp.book_list.set_filter_func(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            #[upgrade_or]
+            false,
+            move |row| win.row_visible(row)
+        ));
+        imp.book_list.set_header_func(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            move |row, before| win.update_header(row, before)
+        ));
+        imp.book_list.connect_row_activated(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            move |_, row| win.toggle_book(row.index())
+        ));
+        imp.book_filter.connect_search_changed(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            move |_| {
+                win.imp().book_list.invalidate_filter();
+                win.imp().book_list.invalidate_headers();
+            }
+        ));
+        imp.book_filter
+            .connect_stop_search(|entry| entry.set_text(""));
+    }
+
+    fn row_visible(&self, row: &gtk::ListBoxRow) -> bool {
+        let imp = self.imp();
+        let Ok(index) = usize::try_from(row.index()) else {
+            return false;
+        };
+        let book = index / 2;
+        let books = imp.books.borrow();
+        let Some(info) = books.get(book) else {
+            return false;
+        };
+        let query = imp.book_filter.text().to_lowercase();
+        let matches = query.is_empty()
+            || info.name.to_lowercase().contains(&query)
+            || info.abbrev.to_lowercase().contains(&query);
+        if index % 2 == 0 {
+            matches
+        } else {
+            matches && imp.expanded.get() == Some(book)
+        }
+    }
+
+    fn update_header(&self, row: &gtk::ListBoxRow, before: Option<&gtk::ListBoxRow>) {
+        let books = self.imp().books.borrow();
+        let section_of = |row: &gtk::ListBoxRow| {
+            usize::try_from(row.index())
+                .ok()
+                .and_then(|i| books.get(i / 2))
+                .map(|b| b.section)
+        };
+        let section = section_of(row);
+        let starts_section = section.is_some() && before.and_then(section_of) != section;
+        match section {
+            Some(section) if starts_section => {
+                if row.header().is_none() {
+                    row.set_header(Some(&section_header(section)));
+                }
+            }
+            _ => row.set_header(None::<&gtk::Widget>),
+        }
+    }
+
+    fn populate_sidebar(&self) {
+        let imp = self.imp();
+        let books = imp.books.borrow();
+        for book in books.iter() {
+            let n = book.chapters.len();
+            let content = gtk::Box::builder().spacing(6).build();
+            // Book names come from translation data; Label does not parse markup by default.
+            content.append(
+                &gtk::Label::builder()
+                    .label(&book.name)
+                    .xalign(0.0)
+                    .hexpand(true)
+                    .ellipsize(pango::EllipsizeMode::End)
+                    .build(),
+            );
+            content.append(
+                &gtk::Label::builder()
+                    .label(n.to_string())
+                    .css_classes(["caption", "dimmed", "numeric"])
+                    .build(),
+            );
+            let row = gtk::ListBoxRow::builder().child(&content).build();
+            let count = u32::try_from(n).unwrap_or(u32::MAX);
+            // Translators: accessible label of a book in the sidebar, e.g. "John, 21 chapters".
+            let label = ngettext("{book}, {n} chapter", "{book}, {n} chapters", count)
+                .replace("{book}", &book.name)
+                .replace("{n}", &n.to_string());
+            row.update_property(&[gtk::accessible::Property::Label(&label)]);
+            imp.book_list.append(&row);
+
+            let grid = gtk::Grid::builder()
+                .css_classes(["chapter-grid"])
+                .column_spacing(6)
+                .row_spacing(6)
+                .column_homogeneous(true)
+                .margin_top(6)
+                .margin_bottom(6)
+                .margin_start(6)
+                .margin_end(6)
+                .build();
+            imp.book_list.append(
+                &gtk::ListBoxRow::builder()
+                    .child(&grid)
+                    .activatable(false)
+                    .selectable(false)
+                    .focusable(false)
+                    .build(),
+            );
+        }
+    }
+
+    /// The chapter grid of `book`, with its buttons created on first use.
+    fn chapter_grid(&self, book: usize) -> Option<gtk::Grid> {
+        let imp = self.imp();
+        let row = imp
+            .book_list
+            .row_at_index(i32::try_from(book * 2 + 1).ok()?)?;
+        let grid = row.child()?.downcast::<gtk::Grid>().ok()?;
+        if grid.first_child().is_none() {
+            let books = imp.books.borrow();
+            let info = books.get(book)?;
+            for (i, &chapter) in (0_i32..).zip(&info.chapters) {
+                let button = gtk::Button::builder()
+                    .label(chapter.to_string())
+                    .css_classes(["flat"])
+                    .action_name("win.open-chapter")
+                    .action_target(&(info.id.as_str(), chapter).to_variant())
+                    .build();
+                // Translators: accessible label of a chapter button; {} is the chapter number.
+                let label = gettext("Chapter {}").replace("{}", &chapter.to_string());
+                button.update_property(&[gtk::accessible::Property::Label(&label)]);
+                grid.attach(&button, i % GRID_COLUMNS, i / GRID_COLUMNS, 1, 1);
+            }
+        }
+        Some(grid)
+    }
+
+    fn toggle_book(&self, index: i32) {
+        let imp = self.imp();
+        // Odd rows hold chapter grids and are not activatable.
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        if index % 2 == 1 {
+            return;
+        }
+        let book = index / 2;
+        let expand = imp.expanded.get() != Some(book);
+        imp.expanded.set(expand.then_some(book));
+        if expand {
+            self.chapter_grid(book);
+            self.highlight_current();
+        } else {
+            imp.book_list.unselect_all();
+        }
+        imp.book_list.invalidate_filter();
+    }
+
+    /// Opens the current book in the sidebar and marks the current chapter.
+    fn sync_sidebar(&self) {
+        let imp = self.imp();
+        let Some((book, _)) = imp.current.get() else {
+            return;
+        };
+        imp.expanded.set(Some(book));
+        if let Some(row) = i32::try_from(book * 2)
+            .ok()
+            .and_then(|i| imp.book_list.row_at_index(i))
+        {
+            imp.book_list.select_row(Some(&row));
+        }
+        self.highlight_current();
+        imp.book_list.invalidate_filter();
+        self.scroll_to_book(book);
+    }
+
+    /// Scrolls the sidebar so the book row is in view, once the list has a layout.
+    fn scroll_to_book(&self, book: usize) {
+        let frames = Cell::new(0_u32);
+        // Tick callbacks run once per frame and only while mapped, so this waits
+        // for the first layout after startup or after the filter changed rows.
+        self.imp().book_list.add_tick_callback(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            #[upgrade_or]
+            glib::ControlFlow::Break,
+            move |list, _| {
+                let imp = win.imp();
+                let bounds = i32::try_from(book * 2)
+                    .ok()
+                    .and_then(|i| list.row_at_index(i))
+                    .and_then(|row| row.compute_bounds(list));
+                let Some(bounds) = bounds.filter(|b| b.height() > 0.0) else {
+                    frames.set(frames.get() + 1);
+                    return if frames.get() < 60 {
+                        glib::ControlFlow::Continue
+                    } else {
+                        glib::ControlFlow::Break
+                    };
+                };
+                let adjustment = imp.book_scroller.vadjustment();
+                let top = f64::from(bounds.y());
+                let bottom = top + f64::from(bounds.height());
+                if top < adjustment.value() || bottom > adjustment.value() + adjustment.page_size()
+                {
+                    adjustment.set_value(top - 48.0);
+                }
+                glib::ControlFlow::Break
+            }
+        ));
+    }
+
+    fn highlight_current(&self) {
+        let imp = self.imp();
+        if let Some(old) = imp.highlighted.take() {
+            old.remove_css_class("suggested-action");
+            old.add_css_class("flat");
+        }
+        let Some((book, chapter)) = imp.current.get() else {
+            return;
+        };
+        let Some(position) = imp
+            .books
+            .borrow()
+            .get(book)
+            .and_then(|b| b.chapters.iter().position(|&c| c == chapter))
+        else {
+            return;
+        };
+        let Some(grid) = self.chapter_grid(book) else {
+            return;
+        };
+        let mut child = grid.first_child();
+        for _ in 0..position {
+            child = child.and_then(|c| c.next_sibling());
+        }
+        if let Some(button) = child.and_downcast::<gtk::Button>() {
+            button.remove_css_class("flat");
+            button.add_css_class("suggested-action");
+            imp.highlighted.replace(Some(button));
+        }
+    }
+
+    fn update_sidebar_subtitle(&self) {
+        let imp = self.imp();
+        let subtitle = if imp.split_view.is_collapsed() {
+            imp.translation_name.borrow().clone()
+        } else {
+            String::new()
+        };
+        imp.sidebar_title.set_subtitle(&subtitle);
     }
 
     fn load_books(&self) {
@@ -184,11 +597,25 @@ impl SelahWindow {
             #[weak(rename_to = win)]
             self,
             async move {
-                let result = gio::spawn_blocking(move || Translation::open(&path)?.books()).await;
+                let result = gio::spawn_blocking(move || {
+                    let translation = Translation::open(&path)?;
+                    let name = translation.meta("name")?.unwrap_or_default();
+                    let mut legal = Vec::new();
+                    for key in ["licence", "attribution", "notice"] {
+                        legal.extend(translation.meta(key)?);
+                    }
+                    Ok::<_, selah_core::Error>((translation.books()?, name, legal.join("\n\n")))
+                })
+                .await;
                 match result {
-                    Ok(Ok(books)) => {
-                        win.populate_sidebar(&books);
-                        *win.imp().books.borrow_mut() = books;
+                    Ok(Ok((books, name, legal))) => {
+                        let imp = win.imp();
+                        *imp.books.borrow_mut() = books;
+                        imp.reader_title.set_subtitle(&name);
+                        *imp.translation_name.borrow_mut() = name;
+                        *imp.translation_legal.borrow_mut() = legal;
+                        win.update_sidebar_subtitle();
+                        win.populate_sidebar();
                         win.resume();
                     }
                     Ok(Err(err)) => win.show_error(&err.to_string()),
@@ -198,70 +625,10 @@ impl SelahWindow {
         ));
     }
 
-    fn populate_sidebar(&self, books: &[BookInfo]) {
-        let mut group: Option<(Section, adw::PreferencesGroup)> = None;
-        for book in books {
-            if group
-                .as_ref()
-                .is_none_or(|(section, _)| *section != book.section)
-            {
-                let new_group = adw::PreferencesGroup::builder()
-                    .title(section_title(book.section))
-                    .build();
-                self.imp().books_box.append(&new_group);
-                group = Some((book.section, new_group));
-            }
-
-            // Book names come from translation data: never parse them as markup.
-            let row = adw::ExpanderRow::builder()
-                .title(&book.name)
-                .use_markup(false)
-                .build();
-            let grid = gtk::Grid::builder()
-                .column_spacing(6)
-                .row_spacing(6)
-                .column_homogeneous(true)
-                .margin_top(6)
-                .margin_bottom(6)
-                .margin_start(6)
-                .margin_end(6)
-                .build();
-            row.add_row(&grid);
-            if let Some(list_row) = grid.parent().and_downcast::<gtk::ListBoxRow>() {
-                list_row.set_activatable(false);
-                list_row.set_focusable(false);
-            }
-
-            // Chapter buttons are created on first expand; Psalms alone has 150.
-            let id = book.id.clone();
-            let chapters = book.chapters.clone();
-            row.connect_expanded_notify(move |row| {
-                if !row.is_expanded() || grid.first_child().is_some() {
-                    return;
-                }
-                for (i, &chapter) in (0_i32..).zip(&chapters) {
-                    let button = gtk::Button::builder()
-                        .label(chapter.to_string())
-                        .action_name("win.open-chapter")
-                        .action_target(&(id.as_str(), chapter).to_variant())
-                        .build();
-                    // Translators: accessible label of a chapter button; {} is the chapter number.
-                    let label = gettext("Chapter {}").replace("{}", &chapter.to_string());
-                    button.update_property(&[gtk::accessible::Property::Label(&label)]);
-                    grid.attach(&button, i % 5, i / 5, 1, 1);
-                }
-            });
-
-            if let Some((_, group)) = &group {
-                group.add(&row);
-            }
-        }
-    }
-
     fn resume(&self) {
         let imp = self.imp();
-        let id = imp.settings.string("last-book");
-        let chapter = imp.settings.uint("last-chapter");
+        let id = self.settings().string("last-book");
+        let chapter = self.settings().uint("last-chapter");
         let target = {
             let books = imp.books.borrow();
             books
@@ -299,12 +666,13 @@ impl SelahWindow {
         };
         imp.current.set(Some((index, chapter)));
         self.update_navigation();
+        self.sync_sidebar();
         imp.split_view.set_show_content(true);
 
-        let saved = imp
-            .settings
+        let settings = self.settings();
+        let saved = settings
             .set_string("last-book", &book.id)
-            .and_then(|()| imp.settings.set_uint("last-chapter", chapter));
+            .and_then(|()| settings.set_uint("last-chapter", chapter));
         if let Err(err) = saved {
             glib::g_warning!("selah", "Failed to save reading position: {err}");
         }
@@ -382,16 +750,20 @@ impl SelahWindow {
                 buffer.insert(&mut end, " ");
             }
             buffer.insert_with_tags_by_name(&mut end, &verse.verse.to_string(), &["verse-number"]);
-            buffer.insert(&mut end, " ");
+            // Thin space between the number and the verse.
+            buffer.insert(&mut end, "\u{2009}");
             buffer.insert(&mut end, &verse.text);
         }
         for heading in headings {
             new_line(&buffer, &mut end, &mut first_line);
             buffer.insert_with_tags_by_name(&mut end, &heading.text, heading_tags(heading.kind));
         }
+        let (start, end) = buffer.bounds();
+        buffer.apply_tag_by_name("body", &start, &end);
 
-        imp.reader_page
-            .set_title(&format!("{} {chapter}", book.name));
+        let title = format!("{} {chapter}", book.name);
+        imp.reader_page.set_title(&title);
+        imp.reader_title.set_title(&title);
         imp.reader_stack.set_visible_child_name("reader");
         imp.scrolled.vadjustment().set_value(0.0);
     }
@@ -403,5 +775,26 @@ impl SelahWindow {
         imp.error_page
             .set_description(Some(&glib::markup_escape_text(message)));
         imp.reader_stack.set_visible_child_name("error");
+    }
+
+    fn show_about(&self) {
+        let imp = self.imp();
+        let about = adw::AboutDialog::builder()
+            .application_name("Selah")
+            .application_icon(config::APP_ID)
+            .developer_name("CJTS15")
+            .version(config::VERSION)
+            .website("https://github.com/CJTS15/selah")
+            .issue_url("https://github.com/CJTS15/selah/issues")
+            .copyright("© 2026 CJTS15")
+            .license_type(gtk::License::Gpl30)
+            .build();
+        let name = imp.translation_name.borrow();
+        if !name.is_empty() {
+            // Legal text is markup; translation metadata is plain text.
+            let legal = glib::markup_escape_text(&imp.translation_legal.borrow());
+            about.add_legal_section(&name, None, gtk::License::Custom, Some(&legal));
+        }
+        about.present(Some(self));
     }
 }

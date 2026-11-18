@@ -45,6 +45,12 @@ fn main() -> glib::ExitCode {
     app.set_accels_for_action("window.close", &["<Control>w"]);
     app.set_accels_for_action("win.previous-chapter", &["<Control>Page_Up"]);
     app.set_accels_for_action("win.next-chapter", &["<Control>Page_Down"]);
+    app.set_accels_for_action(
+        "win.zoom-in",
+        &["<Control>plus", "<Control>equal", "<Control>KP_Add"],
+    );
+    app.set_accels_for_action("win.zoom-out", &["<Control>minus", "<Control>KP_Subtract"]);
+    app.set_accels_for_action("win.zoom-reset", &["<Control>0", "<Control>KP_0"]);
 
     app.run()
 }

@@ -1,5 +1,22 @@
 using Gtk 4.0;
 using Adw 1;
+// Defined before the template so the popover's custom children find their slots.
+menu primary_menu {
+  section {
+    item {
+      custom: "theme";
+    }
+
+    item {
+      custom: "zoom";
+    }
+  }
+
+  section {
+    item (_("_Keyboard Shortcuts"), "app.shortcuts")
+    item (_("_About Selah"), "win.about")
+  }
+}
 
 template $SelahWindow: Adw.ApplicationWindow {
   title: _("Selah");
@@ -11,27 +28,150 @@ template $SelahWindow: Adw.ApplicationWindow {
 
     setters {
       split_view.collapsed: true;
+      reader_header.show-back-button: false;
+      show_books_button.visible: true;
     }
   }
 
   content: Adw.NavigationSplitView split_view {
+    max-sidebar-width: 300;
+
     sidebar: Adw.NavigationPage {
       title: _("Books");
 
       child: Adw.ToolbarView {
         [top]
-        Adw.HeaderBar {}
+        Adw.HeaderBar {
+          title-widget: Adw.WindowTitle sidebar_title {
+            title: _("Selah");
+          };
 
-        content: ScrolledWindow {
+          [end]
+          MenuButton {
+            primary: true;
+            icon-name: "open-menu-symbolic";
+            tooltip-text: _("Main Menu");
+
+            popover: PopoverMenu {
+              menu-model: primary_menu;
+
+              [theme]
+              Box {
+                styles [
+                  "style-switcher",
+                ]
+
+                spacing: 18;
+                halign: center;
+                margin-top: 6;
+                margin-bottom: 6;
+
+                CheckButton style_follow {
+                  styles [
+                    "follow",
+                  ]
+
+                  tooltip-text: _("Follow System Style");
+
+                  accessibility {
+                    label: _("Follow System Style");
+                  }
+                }
+
+                CheckButton style_light {
+                  styles [
+                    "light",
+                  ]
+
+                  group: style_follow;
+                  tooltip-text: _("Light Style");
+
+                  accessibility {
+                    label: _("Light Style");
+                  }
+                }
+
+                CheckButton style_dark {
+                  styles [
+                    "dark",
+                  ]
+
+                  group: style_follow;
+                  tooltip-text: _("Dark Style");
+
+                  accessibility {
+                    label: _("Dark Style");
+                  }
+                }
+              }
+
+              [zoom]
+              Box {
+                spacing: 6;
+                margin-start: 6;
+                margin-end: 6;
+
+                Button {
+                  styles [
+                    "flat",
+                    "circular",
+                  ]
+
+                  icon-name: "list-remove-symbolic";
+                  tooltip-text: _("Zoom Out");
+                  action-name: "win.zoom-out";
+
+                  accessibility {
+                    label: _("Zoom Out");
+                  }
+                }
+
+                Label zoom_label {
+                  styles [
+                    "numeric",
+                  ]
+
+                  hexpand: true;
+                }
+
+                Button {
+                  styles [
+                    "flat",
+                    "circular",
+                  ]
+
+                  icon-name: "list-add-symbolic";
+                  tooltip-text: _("Zoom In");
+                  action-name: "win.zoom-in";
+
+                  accessibility {
+                    label: _("Zoom In");
+                  }
+                }
+              }
+            };
+          }
+        }
+
+        [top]
+        SearchEntry book_filter {
+          placeholder-text: _("Filter books");
+          margin-start: 12;
+          margin-end: 12;
+          margin-bottom: 6;
+        }
+
+        content: ScrolledWindow book_scroller {
           hscrollbar-policy: never;
 
-          child: Box books_box {
-            orientation: vertical;
-            spacing: 18;
-            margin-top: 12;
-            margin-bottom: 12;
-            margin-start: 12;
-            margin-end: 12;
+          child: ListBox book_list {
+            styles [
+              "navigation-sidebar",
+            ]
+
+            accessibility {
+              label: _("Books");
+            }
           };
         };
       };
@@ -42,31 +182,44 @@ template $SelahWindow: Adw.ApplicationWindow {
 
       child: Adw.ToolbarView {
         [top]
-        Adw.HeaderBar {
-          [end]
-          Box {
-            spacing: 6;
+        Adw.HeaderBar reader_header {
+          // Replaces the back button on narrow widths, as in the phone mockup.
 
-            Button {
-              icon-name: "go-previous-symbolic";
-              tooltip-text: _("Previous Chapter");
-              action-name: "win.previous-chapter";
+          [start]
+          Button show_books_button {
+            visible: false;
+            icon-name: "sidebar-show-symbolic";
+            tooltip-text: _("Show Books");
+            action-name: "win.show-books";
 
-              accessibility {
-                label: _("Previous Chapter");
-              }
-            }
-
-            Button {
-              icon-name: "go-next-symbolic";
-              tooltip-text: _("Next Chapter");
-              action-name: "win.next-chapter";
-
-              accessibility {
-                label: _("Next Chapter");
-              }
+            accessibility {
+              label: _("Show Books");
             }
           }
+
+          [start]
+          Button {
+            icon-name: "go-previous-symbolic";
+            tooltip-text: _("Previous Chapter");
+            action-name: "win.previous-chapter";
+
+            accessibility {
+              label: _("Previous Chapter");
+            }
+          }
+
+          [start]
+          Button {
+            icon-name: "go-next-symbolic";
+            tooltip-text: _("Next Chapter");
+            action-name: "win.next-chapter";
+
+            accessibility {
+              label: _("Next Chapter");
+            }
+          }
+
+          title-widget: Adw.WindowTitle reader_title {};
         }
 
         content: Stack reader_stack {
@@ -74,6 +227,10 @@ template $SelahWindow: Adw.ApplicationWindow {
             name: "reader";
 
             child: ScrolledWindow scrolled {
+              styles [
+                "view",
+              ]
+
               hscrollbar-policy: never;
 
               child: Adw.ClampScrollable {
@@ -84,11 +241,10 @@ template $SelahWindow: Adw.ApplicationWindow {
                   cursor-visible: false;
                   wrap-mode: word_char;
                   top-margin: 24;
-                  bottom-margin: 24;
-                  left-margin: 18;
-                  right-margin: 18;
-                  pixels-below-lines: 12;
-                  pixels-inside-wrap: 4;
+                  bottom-margin: 48;
+                  left-margin: 24;
+                  right-margin: 24;
+                  pixels-below-lines: 16;
                 };
               };
             };

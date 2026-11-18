@@ -17,6 +17,7 @@ cargo_env = [
   'LOCALEDIR=' + localedir,
   'PKGDATADIR=' + pkgdatadir,
   'PROFILE=' + get_option('profile'),
+  'VERSION=' + meson.project_version(),
 ]
 
 # Builds the app and selah-import; only the app is installed. data/ runs
