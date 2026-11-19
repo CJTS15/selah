@@ -552,13 +552,35 @@ impl SelahWindow {
             .current_ref(self.active_verse())
             .filter(|r| r.verse.is_some())
         {
-            self.with_db(|db| {
-                let bookmarked = db.is_bookmarked(&reference)?;
-                db.set_bookmark(&reference, !bookmarked)
+            let added = self.with_db(|db| {
+                let added = !db.is_bookmarked(&reference)?;
+                db.set_bookmark(&reference, added)?;
+                Ok(added)
             });
             self.after_annotation_change();
+            if let Some(added) = added {
+                self.bookmark_toast(&reference, added);
+            }
         }
         self.close_verse_actions();
+    }
+
+    /// Confirms a bookmark change, naming the verse or chapter.
+    fn bookmark_toast(&self, reference: &Ref, added: bool) {
+        if !added {
+            self.toast(&gettext("Removed Bookmark"));
+            return;
+        }
+        let imp = self.imp();
+        let name = imp
+            .books
+            .borrow()
+            .iter()
+            .find(|b| b.id == reference.book)
+            .map_or_else(|| reference.book.clone(), |b| b.name.clone());
+        let title = reference_title(&name, reference.chapter, reference.verse.map(|v| (v, v)));
+        // Translators: {reference} is a verse or chapter, such as "John 3:16".
+        self.toast(&gettext("Bookmarked {reference}").replace("{reference}", &title));
     }
 
     fn copy_active_verse(&self) {
@@ -635,6 +657,7 @@ impl SelahWindow {
             .is_some();
         if done {
             self.refresh_saved();
+            self.bookmark_toast(&reference, bookmarked);
         }
         done
     }
