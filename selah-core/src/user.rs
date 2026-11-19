@@ -220,6 +220,25 @@ impl UserDb {
         Ok(())
     }
 
+    /// Bookmarked verses of a chapter (not the chapter bookmark itself).
+    pub fn verse_bookmarks(&self, book: &str, chapter: u32) -> Result<Vec<u32>, Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ref_start FROM annotation WHERE kind = 'bookmark' AND ref_start LIKE ?1",
+        )?;
+        let mut rows = stmt.query(params![format!("{book}.{chapter}.%")])?;
+        let mut verses = Vec::new();
+        while let Some(row) = rows.next()? {
+            let key: String = row.get(0)?;
+            if let Some(Ref {
+                verse: Some(verse), ..
+            }) = Ref::parse(&key)
+            {
+                verses.push(verse);
+            }
+        }
+        Ok(verses)
+    }
+
     pub fn is_bookmarked(&self, reference: &Ref) -> Result<bool, Error> {
         Ok(self
             .conn
@@ -417,6 +436,12 @@ mod tests {
         db.set_bookmark(&verse("JHN", 3, 16), true).unwrap();
         db.set_bookmark(&verse("JHN", 3, 16), true).unwrap();
         assert!(db.is_bookmarked(&chapter).unwrap());
+        assert_eq!(
+            db.verse_bookmarks("JHN", 3).unwrap(),
+            vec![16],
+            "chapter bookmark excluded"
+        );
+        assert!(db.verse_bookmarks("JHN", 30).unwrap().is_empty());
         db.set_highlight(&verse("PSA", 23, 1), Colour::Blue)
             .unwrap();
 

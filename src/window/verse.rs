@@ -70,6 +70,22 @@ impl SelahWindow {
     pub(super) fn setup_verse_actions(&self) {
         let imp = self.imp();
         let buffer = imp.text_view.buffer();
+        // Created before the colour tags so a colour highlight wins the background;
+        // the accent verse number still marks the bookmark.
+        buffer.create_tag(Some("bookmarked"), &[]);
+        buffer.create_tag(Some("bookmarked-number"), &[("weight", &800_i32)]);
+        self.apply_accent();
+        let style = adw::StyleManager::default();
+        style.connect_accent_color_notify(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            move |_| win.apply_accent()
+        ));
+        style.connect_dark_notify(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            move |_| win.apply_accent()
+        ));
         for colour in Colour::ALL {
             buffer.create_tag(
                 Some(&format!("hl-{}", colour.as_str())),
@@ -394,6 +410,10 @@ impl SelahWindow {
             gtk::ShortcutTrigger::parse_string("<Control>c"),
             Some(gtk::NamedAction::new("win.copy-verse")),
         ));
+        shortcuts.add_shortcut(gtk::Shortcut::new(
+            gtk::ShortcutTrigger::parse_string("<Control>d"),
+            Some(gtk::NamedAction::new("win.bookmark-verse")),
+        ));
         popover.add_controller(shortcuts);
         popover.connect_closed(glib::clone!(
             #[weak(rename_to = win)]
@@ -613,7 +633,23 @@ impl SelahWindow {
         self.close_verse_actions();
     }
 
-    /// Draws the open chapter's highlights.
+    /// Tints bookmarked verses with the system accent colour.
+    fn apply_accent(&self) {
+        let style = adw::StyleManager::default();
+        let tags = self.imp().text_view.buffer().tag_table();
+        let accent = style.accent_color();
+        if let Some(tag) = tags.lookup("bookmarked") {
+            let mut background = accent.to_rgba();
+            background.set_alpha(0.18);
+            tag.set_background_rgba(Some(&background));
+        }
+        if let Some(tag) = tags.lookup("bookmarked-number") {
+            // The standalone variant keeps enough contrast as text colour.
+            tag.set_foreground_rgba(Some(&accent.to_standalone_rgba(style.is_dark())));
+        }
+    }
+
+    /// Draws the open chapter's highlights and bookmarked verses.
     pub(super) fn apply_highlights(&self) {
         let imp = self.imp();
         let buffer = imp.text_view.buffer();
@@ -621,9 +657,30 @@ impl SelahWindow {
         for colour in Colour::ALL {
             buffer.remove_tag_by_name(&format!("hl-{}", colour.as_str()), &start, &end);
         }
+        buffer.remove_tag_by_name("bookmarked", &start, &end);
+        buffer.remove_tag_by_name("bookmarked-number", &start, &end);
         let Some(Ref { book, chapter, .. }) = self.current_ref(None) else {
             return;
         };
+        for verse in self
+            .with_db(|db| db.verse_bookmarks(&book, chapter))
+            .unwrap_or_default()
+        {
+            if let Some((start, end)) = self.verse_range(verse) {
+                // The range starts with the verse number's digits.
+                let digits = i32::try_from(verse.to_string().len()).unwrap_or(0);
+                buffer.apply_tag_by_name(
+                    "bookmarked",
+                    &buffer.iter_at_offset(start),
+                    &buffer.iter_at_offset(end),
+                );
+                buffer.apply_tag_by_name(
+                    "bookmarked-number",
+                    &buffer.iter_at_offset(start),
+                    &buffer.iter_at_offset(start + digits),
+                );
+            }
+        }
         for (verse, colour) in self
             .with_db(|db| db.highlights(&book, chapter))
             .unwrap_or_default()
