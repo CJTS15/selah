@@ -5,6 +5,7 @@ pub mod books;
 pub mod import;
 pub mod refs;
 pub mod store;
+pub mod user;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
