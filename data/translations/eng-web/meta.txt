@@ -1,0 +1,8 @@
+id=eng-web
+name=World English Bible
+language=en
+direction=ltr
+licence=Public Domain
+attribution=Courtesy of eBible.org.
+notice="World English Bible" is a trademark of eBible.org. The text is unchanged; Selah does not show its footnotes, cross references or Strong's numbers.
+abbreviation=WEB

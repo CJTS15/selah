@@ -505,7 +505,13 @@ mod tests {
     use crate::import::import_dir;
 
     fn kjv() -> Translation {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data/translations/eng-kjv");
+        bundled("eng-kjv")
+    }
+
+    fn bundled(id: &str) -> Translation {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../data/translations")
+            .join(id);
         let (meta, books, mapping) = import_dir(&dir).unwrap();
         let mut conn = Connection::open_in_memory().unwrap();
         write(&mut conn, &meta, &books, &mapping).unwrap();
@@ -714,5 +720,28 @@ mod tests {
         let chapter = t.chapter("ROM", 14).unwrap();
         assert_eq!(chapter.canonical, vec![None, Some(r("ROM.16.25"))]);
         assert_eq!(t.chapter("SIR", 11).unwrap().verses[1].verse_end, Some(16));
+    }
+
+    #[test]
+    fn web_versification() {
+        let web = bundled("eng-web");
+        let r = |key: &str| Ref::parse(key).unwrap();
+        let from = |key: &str| web.from_canonical(&r(key)).unwrap().map(|r| r.key());
+        let to = |key: &str| web.to_canonical(&r(key)).unwrap().map(|r| r.key());
+
+        assert_eq!(from("JHN.3.16").as_deref(), Some("JHN.3.16"));
+        assert_eq!(from("ROM.16.25").as_deref(), Some("ROM.14.24"));
+        assert_eq!(from("MAT.23.13").as_deref(), Some("MAT.23.14"));
+        assert_eq!(from("ACT.8.37"), None, "omitted by WEB");
+        assert_eq!(from("2ES.7.36").as_deref(), Some("2ES.7.106"));
+        assert_eq!(to("2ES.7.50"), None, "fragment the KJV lacks");
+        assert_eq!(from("S3Y.1.45"), None);
+        assert_eq!(from("S3Y.1.56").as_deref(), Some("DAG.3.77"));
+        assert_eq!(from("SUS.1").as_deref(), Some("DAG.13"));
+        assert_eq!(to("DAG.14").as_deref(), Some("BEL.1"));
+        assert_eq!(from("ESG.11.1").as_deref(), Some("ESG.10.14"));
+        assert_eq!(from("SIR.33.31").as_deref(), Some("SIR.33.32"));
+        // The only combined verse with text.
+        assert_eq!(from("4MA.8.29").as_deref(), Some("4MA.8.28"));
     }
 }

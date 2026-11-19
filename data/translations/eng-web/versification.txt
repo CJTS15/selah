@@ -1,0 +1,34 @@
+# World English Bible verse numbers that differ from the KJV numbering
+# Selah stores bookmarks and highlights by. Translation side first; `none`
+# means the verses have no KJV counterpart. Each line was checked against
+# the text of both translations (2026-11-20). Unlisted verses map to
+# themselves.
+
+# The two woes appear in the opposite order.
+MAT 23:13 = MAT 23:14
+MAT 23:14 = MAT 23:13
+
+# The doxology closes chapter 14 instead of chapter 16.
+ROM 14:24-26 = ROM 16:25-27
+
+# KJV 33:16 and 33:31 are each split in two.
+SIR 33:17 = none
+SIR 33:18-32 = SIR 33:17-31
+SIR 33:33 = none
+
+# The colophon ends WEB's Greek Esther and opens the KJV's chapter 11.
+ESG 10:14 = ESG 11:1
+
+# Greek Daniel holds the KJV's separate Additions. In the Song of the Three,
+# WEB lacks KJV 1:45 ("winter and summer"), and its 3:78 ("springs") has no
+# counterpart to KJV 1:55 ("mountains").
+DAG 3:24-67 = S3Y 1:1-44
+DAG 3:68-76 = S3Y 1:46-54
+DAG 3:77 = S3Y 1:56
+DAG 3:79-90 = S3Y 1:57-68
+DAG 13:1-64 = SUS 1:1-64
+DAG 14:1-42 = BEL 1:1-42
+
+# The fragment missing from the KJV, then the KJV's 7:36-70.
+2ES 7:36-105 = none
+2ES 7:106-140 = 2ES 7:36-70

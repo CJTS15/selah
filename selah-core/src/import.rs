@@ -219,7 +219,9 @@ impl Parser {
             "ide" | "toc1" | "mt" | "mt1" | "mt2" | "mt3" | "imt" | "imt1" | "is" | "is1"
             | "ip" | "rem" | "usfm" | "sts" => self.target = Target::Ignore,
             // Chapter labels (`\cl Psalm`, `\cp 151`) repeat the chapter number.
-            "cl" | "cp" => {}
+            // Speaker labels (`\sp Beloved`, Song of Songs) are editorial and
+            // often fall mid-verse, so they are dropped too.
+            "cl" | "cp" | "sp" => {}
             "c" => {
                 self.end_chapter();
                 self.chapter = parse_number(rest.trim(), "chapter")?;
@@ -270,8 +272,7 @@ impl Parser {
                 self.append(rest);
             }
             "d" => self.start_heading(HeadingKind::Title, rest),
-            // `\sp` names the speaker, as in the Song of Songs.
-            "s" | "s1" | "s2" | "s3" | "ms" | "ms1" | "ms2" | "sp" => {
+            "s" | "s1" | "s2" | "s3" | "ms" | "ms1" | "ms2" => {
                 self.start_heading(HeadingKind::Section, rest)
             }
             "f" | "fe" | "x" => self.skipping = true,
@@ -489,6 +490,8 @@ mod tests {
 \sp Beloved
 \p
 \v 14 Good things and bad.
+\sp Friends
+\q1 Rejoice.
 \p
 \v 15-16 \f + \fr 11:15-16 \ft Omitted by the best authorities. \f*
 \v 17 The gift of the Lord.
@@ -503,17 +506,12 @@ mod tests {
         assert_eq!(
             verses,
             vec![
-                (14, None, true, "Good things and bad."),
+                (14, None, true, "Good things and bad. Rejoice."),
                 (17, None, true, "The gift of the Lord."),
                 (18, Some(19), false, "So they said."),
             ]
         );
-        let headings: Vec<_> = book
-            .headings
-            .iter()
-            .map(|h| (h.before_verse, h.kind, h.text.as_str()))
-            .collect();
-        assert_eq!(headings, vec![(14, HeadingKind::Section, "Beloved")]);
+        assert!(book.headings.is_empty(), "{:?}", book.headings);
     }
 
     #[test]
