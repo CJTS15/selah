@@ -56,3 +56,41 @@
   padding-left: 0;
   padding-right: 0;
 }
+
+/* Highlight colours: swatches in the verse actions and dots on the Saved page. */
+.swatches checkbutton {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 9999px;
+}
+
+.swatches checkbutton radio,
+.swatches checkbutton check {
+  opacity: 0;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.swatches checkbutton:checked {
+  box-shadow: 0 0 0 3px var(--accent-bg-color);
+}
+
+.colour-dot {
+  min-width: 12px;
+  min-height: 12px;
+  border-radius: 9999px;
+}
+
+.swatches .yellow, .colour-dot.yellow { background-color: #f6d32d; }
+.swatches .green, .colour-dot.green { background-color: #57e389; }
+.swatches .blue, .colour-dot.blue { background-color: #62a0ea; }
+.swatches .pink, .colour-dot.pink { background-color: #ed5b9a; }
+.swatches .purple, .colour-dot.purple { background-color: #c061cb; }
+
+.verse-actions button {
+  font-weight: normal;
+}

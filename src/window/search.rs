@@ -38,15 +38,6 @@ fn section_label(section: Section) -> String {
     }
 }
 
-/// "John 3", "John 3:16" or "Psalms 23:1–4".
-fn reference_title(book: &str, chapter: u32, verses: Option<(u32, u32)>) -> String {
-    match verses {
-        None => format!("{book} {chapter}"),
-        Some((first, last)) if first == last => format!("{book} {chapter}:{first}"),
-        Some((first, last)) => format!("{book} {chapter}:{first}–{last}"),
-    }
-}
-
 fn group_header(title: &str, detail: Option<&str>) -> gtk::Box {
     let header = gtk::Box::builder()
         .spacing(6)
