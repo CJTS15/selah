@@ -35,6 +35,12 @@
   background-color: #222226;
 }
 
+/* Search result text, in the reading font. */
+.search-snippet {
+  font-family: "Noto Serif", serif;
+  font-size: 1.1em;
+}
+
 /* "In this translation" next to the Deuterocanon heading. */
 .section-badge {
   padding: 1px 6px;

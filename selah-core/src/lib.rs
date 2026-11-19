@@ -3,6 +3,7 @@
 
 pub mod books;
 pub mod import;
+pub mod refs;
 pub mod store;
 
 #[derive(Debug, thiserror::Error)]
