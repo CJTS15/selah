@@ -8,10 +8,13 @@ use gtk::{gio, glib, pango};
 use selah_core::books::Section;
 use selah_core::import::HeadingKind;
 use selah_core::store::{self, BookInfo, Chapter, Translation};
+use selah_core::user::{Annotation, Filter, UserDb};
 
 use crate::config;
 
+mod saved;
 mod search;
+mod verse;
 
 /// Reader font size at 100% zoom, in points (scaled by system text scaling).
 const BASE_POINTS: f64 = 13.0;
@@ -28,7 +31,25 @@ mod imp {
     #[template(resource = "/io/github/cjts15/Selah/ui/window.ui")]
     pub struct SelahWindow {
         #[template_child]
+        pub toast_overlay: TemplateChild<adw::ToastOverlay>,
+        #[template_child]
         pub split_view: TemplateChild<adw::NavigationSplitView>,
+        #[template_child]
+        pub sidebar_mode: TemplateChild<adw::ToggleGroup>,
+        #[template_child]
+        pub sidebar_stack: TemplateChild<gtk::Stack>,
+        #[template_child]
+        pub saved_filters: TemplateChild<gtk::ListBox>,
+        #[template_child]
+        pub verse_sheet: TemplateChild<adw::BottomSheet>,
+        #[template_child]
+        pub saved_title: TemplateChild<adw::WindowTitle>,
+        #[template_child]
+        pub saved_order: TemplateChild<gtk::DropDown>,
+        #[template_child]
+        pub saved_stack: TemplateChild<gtk::Stack>,
+        #[template_child]
+        pub saved_list: TemplateChild<gtk::Box>,
         #[template_child]
         pub sidebar_title: TemplateChild<adw::WindowTitle>,
         #[template_child]
@@ -86,6 +107,20 @@ mod imp {
         pub search_generation: Cell<u64>,
         /// First activatable row in the search results, for the Down key.
         pub first_result: RefCell<Option<gtk::ListBoxRow>>,
+        pub translation_abbrev: RefCell<String>,
+        /// Highlights and bookmarks; `None` if the user database could not open.
+        pub user_db: RefCell<Option<UserDb>>,
+        /// The chapter on screen, for copying verse text.
+        pub chapter_content: RefCell<Option<Chapter>>,
+        /// Verse number with the buffer offsets of its number and text.
+        pub verse_ranges: RefCell<Vec<(u32, i32, i32)>>,
+        /// Verse chosen by tap or keyboard for the verse actions.
+        pub active_verse: Cell<Option<u32>>,
+        pub verse_popover: RefCell<Option<gtk::Popover>>,
+        pub saved_filter: Cell<Option<Filter>>,
+        /// Annotations on the Saved page, for remove and undo.
+        pub saved_items: RefCell<Vec<Annotation>>,
+        pub saved_generation: Cell<u64>,
     }
 
     #[glib::object_subclass]
@@ -159,6 +194,9 @@ mod imp {
             obj.apply_zoom();
             obj.setup_book_list();
             obj.setup_search();
+            obj.open_user_db();
+            obj.setup_verse_actions();
+            obj.setup_saved();
             obj.update_navigation();
 
             self.split_view.connect_collapsed_notify(glib::clone!(
@@ -181,6 +219,13 @@ mod imp {
             ));
 
             obj.load_books();
+        }
+
+        fn dispose(&self) {
+            // The verse popover is parented to the text view.
+            if let Some(popover) = self.verse_popover.take() {
+                popover.unparent();
+            }
         }
     }
 
@@ -239,6 +284,15 @@ fn section_header(section: Section) -> gtk::Widget {
         );
     }
     header.upcast()
+}
+
+/// "John 3", "John 3:16" or "Psalms 23:1–4".
+fn reference_title(book: &str, chapter: u32, verses: Option<(u32, u32)>) -> String {
+    match verses {
+        None => format!("{book} {chapter}"),
+        Some((first, last)) if first == last => format!("{book} {chapter}:{first}"),
+        Some((first, last)) => format!("{book} {chapter}:{first}–{last}"),
+    }
 }
 
 /// Starts a new line unless nothing has been written yet.
@@ -633,20 +687,29 @@ impl SelahWindow {
                 let result = gio::spawn_blocking(move || {
                     let translation = Translation::open(&path)?;
                     let name = translation.meta("name")?.unwrap_or_default();
+                    let abbrev = translation
+                        .meta("abbreviation")?
+                        .unwrap_or_else(|| name.clone());
                     let mut legal = Vec::new();
                     for key in ["licence", "attribution", "notice"] {
                         legal.extend(translation.meta(key)?);
                     }
-                    Ok::<_, selah_core::Error>((translation.books()?, name, legal.join("\n\n")))
+                    Ok::<_, selah_core::Error>((
+                        translation.books()?,
+                        name,
+                        abbrev,
+                        legal.join("\n\n"),
+                    ))
                 })
                 .await;
                 match result {
-                    Ok(Ok((books, name, legal))) => {
+                    Ok(Ok((books, name, abbrev, legal))) => {
                         let imp = win.imp();
                         *imp.books.borrow_mut() = books;
                         imp.reader_title.set_subtitle(&name);
                         *imp.translation_name.borrow_mut() = name;
                         *imp.translation_legal.borrow_mut() = legal;
+                        *imp.translation_abbrev.borrow_mut() = abbrev;
                         win.update_sidebar_subtitle();
                         win.populate_sidebar();
                         win.resume();
@@ -705,6 +768,7 @@ impl SelahWindow {
         }
         imp.content_stack.set_visible_child_name("reading");
         self.update_navigation();
+        self.update_chapter_bookmark();
         self.sync_sidebar();
         imp.split_view.set_show_content(true);
 
@@ -768,6 +832,7 @@ impl SelahWindow {
         let mut first_line = true;
         // Character offsets of the requested verses, for selection.
         let mut selection: Option<(i32, i32)> = None;
+        let mut ranges = Vec::with_capacity(content.verses.len());
         let heading_tags = |kind: HeadingKind| -> &'static [&'static str] {
             match kind {
                 HeadingKind::Title => &["title"],
@@ -801,6 +866,7 @@ impl SelahWindow {
             // Thin space between the number and the verse.
             buffer.insert(&mut end, "\u{2009}");
             buffer.insert(&mut end, &verse.text);
+            ranges.push((verse.verse, verse_start, end.offset()));
             if let Some((first, last)) = verses
                 && (first..=last).contains(&verse.verse)
             {
@@ -814,6 +880,10 @@ impl SelahWindow {
         }
         let (start, end) = buffer.bounds();
         buffer.apply_tag_by_name("body", &start, &end);
+        *imp.verse_ranges.borrow_mut() = ranges;
+        *imp.chapter_content.borrow_mut() = Some(content.clone());
+        imp.active_verse.set(None);
+        self.apply_highlights();
 
         let title = format!("{} {chapter}", book.name);
         imp.reader_page.set_title(&title);

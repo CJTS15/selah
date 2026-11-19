@@ -5,3 +5,4 @@ direction=ltr
 licence=Public Domain
 attribution=Courtesy of the CrossWire Bible Society and eBible.org.
 notice=The King James Version is in the public domain in most of the world. In the United Kingdom, rights are vested in the Crown and administered by the King's Printer under Letters Patent.
+abbreviation=KJV

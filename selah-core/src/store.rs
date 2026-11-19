@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 use crate::Error;
 use crate::books::Section;
@@ -198,6 +198,23 @@ impl Translation {
             )));
         }
         Ok(Self { conn })
+    }
+
+    /// The text of one verse, or `None` if this translation does not have it.
+    pub fn verse_text(
+        &self,
+        book: &str,
+        chapter: u32,
+        verse: u32,
+    ) -> Result<Option<String>, Error> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT text FROM verse WHERE book = ?1 AND chapter = ?2 AND verse = ?3",
+                params![book, chapter, verse],
+                |row| row.get(0),
+            )
+            .optional()?)
     }
 
     /// A value from the translation's metadata, such as `name` or `licence`.
@@ -492,6 +509,13 @@ mod tests {
                 .contains("Letters Patent")
         );
         assert_eq!(kjv.meta("missing").unwrap(), None);
+        assert!(
+            kjv.verse_text("JHN", 3, 16)
+                .unwrap()
+                .unwrap()
+                .starts_with("For God so loved")
+        );
+        assert_eq!(kjv.verse_text("JHN", 3, 99).unwrap(), None);
         assert!(kjv.chapter("GEN", 51).unwrap().verses.is_empty());
     }
 }
