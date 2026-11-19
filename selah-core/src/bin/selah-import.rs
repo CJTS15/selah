@@ -24,7 +24,7 @@ fn main() -> ExitCode {
         })
         .map_err(selah_core::Error::from)
         .and_then(|()| import::import_dir(source))
-        .and_then(|(meta, books)| store::create(&partial, &meta, &books))
+        .and_then(|(meta, books, mapping)| store::create(&partial, &meta, &books, &mapping))
         .and_then(|()| fs::rename(&partial, output).map_err(Into::into));
 
     match result {
