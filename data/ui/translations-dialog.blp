@@ -1,0 +1,38 @@
+using Gtk 4.0;
+using Adw 1;
+// Loaded with GtkBuilder; the rows are added from code.
+Adw.Dialog dialog {
+  title: _("Translations");
+  content-width: 600;
+  content-height: 640;
+
+  child: Adw.ToastOverlay toasts {
+    child: Adw.ToolbarView {
+      [top]
+      Adw.HeaderBar {
+        [start]
+        Button {
+          label: _("_Import…");
+          use-underline: true;
+          tooltip-text: _("Import a Translation Package");
+          action-name: "win.import-translation";
+        }
+      }
+
+      content: Adw.PreferencesPage {
+        Adw.PreferencesGroup {
+          title: _("Installed");
+          description: _("Available offline. The default opens at start-up.");
+
+          ListBox installed_list {
+            selection-mode: none;
+
+            styles [
+              "boxed-list",
+            ]
+          }
+        }
+      };
+    };
+  };
+}

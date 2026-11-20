@@ -1,6 +1,7 @@
 id=eng-web
 name=World English Bible
 language=en
+language_name=English
 direction=ltr
 licence=Public Domain
 attribution=Courtesy of eBible.org.

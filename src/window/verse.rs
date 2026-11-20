@@ -272,7 +272,7 @@ impl SelahWindow {
     /// The canonical reference that user data is stored by, for the open
     /// chapter (through its first verse) or one of its verses. `None` while
     /// a chapter loads, or for a verse the canonical scheme lacks.
-    fn canonical_ref(&self, verse: Option<u32>) -> Option<Ref> {
+    pub(super) fn canonical_ref(&self, verse: Option<u32>) -> Option<Ref> {
         let content = self.imp().chapter_content.borrow();
         let content = content.as_ref()?;
         match verse {

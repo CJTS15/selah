@@ -2,6 +2,7 @@
 <gresources>
   <gresource prefix="/io/github/cjts15/Selah">
     <file compressed="true" preprocess="xml-stripblanks">ui/window.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks">ui/translations-dialog.ui</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="shortcuts-dialog.ui">ui/shortcuts-dialog.ui</file>
     <file compressed="true">style.css</file>
   </gresource>

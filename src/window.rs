@@ -14,6 +14,7 @@ use crate::config;
 
 mod saved;
 mod search;
+mod translations;
 mod verse;
 
 /// Reader font size at 100% zoom, in points (scaled by system text scaling).
@@ -127,6 +128,8 @@ mod imp {
         /// Annotations on the Saved page, for remove and undo.
         pub saved_items: RefCell<Vec<Annotation>>,
         pub saved_generation: Cell<u64>,
+        /// The open Translations dialog, refreshed when translations change.
+        pub translations_dialog: RefCell<Option<translations::TranslationsDialog>>,
     }
 
     #[glib::object_subclass]
@@ -262,49 +265,82 @@ const DEFAULT_TRANSLATION: &str = "eng-kjv";
 #[derive(Debug, Clone)]
 pub struct TranslationInfo {
     pub id: String,
+    pub path: PathBuf,
+    /// Shipped with the app; cannot be removed.
+    pub built_in: bool,
     pub name: String,
     pub abbrev: String,
+    /// The language's own name if the metadata has one, else its code.
+    pub language: String,
+    pub licence: String,
+    pub deuterocanon: bool,
+    /// File size in bytes.
+    pub size: u64,
     /// Licence, attribution and notice shown in About.
     pub legal: String,
 }
 
-fn translations_dir() -> PathBuf {
+fn bundled_dir() -> PathBuf {
     PathBuf::from(config::PKGDATADIR).join("translations")
 }
 
-/// Reads the metadata of every bundled translation, sorted by name.
+/// Where imported translations are installed.
+fn installed_dir() -> PathBuf {
+    glib::user_data_dir().join("selah").join("translations")
+}
+
+/// Reads the metadata of every bundled and installed translation, sorted by
+/// name. A bundled translation wins over an installed file with its id.
 fn find_translations() -> Result<Vec<TranslationInfo>, selah_core::Error> {
-    let mut found = Vec::new();
-    for entry in std::fs::read_dir(translations_dir())? {
-        let path = entry?.path();
-        let Some(id) = path
-            .extension()
-            .filter(|ext| *ext == "sqlite")
-            .and(path.file_stem())
-            .and_then(|stem| stem.to_str())
-        else {
-            continue;
+    let mut found: Vec<TranslationInfo> = Vec::new();
+    for (dir, built_in) in [(bundled_dir(), true), (installed_dir(), false)] {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(err) if !built_in && err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err.into()),
         };
-        let info = Translation::open(&path).and_then(|translation| {
-            let name = translation.meta("name")?.unwrap_or_else(|| id.to_owned());
-            let abbrev = translation
-                .meta("abbreviation")?
-                .unwrap_or_else(|| name.clone());
-            let mut legal = Vec::new();
-            for key in ["licence", "attribution", "notice"] {
-                legal.extend(translation.meta(key)?);
+        for entry in entries {
+            let path = entry?.path();
+            let Some(id) = path
+                .extension()
+                .filter(|ext| *ext == "sqlite")
+                .and(path.file_stem())
+                .and_then(|stem| stem.to_str())
+                .filter(|id| !found.iter().any(|t| t.id == *id))
+            else {
+                continue;
+            };
+            let info = Translation::open(&path).and_then(|translation| {
+                let meta = |key: &str| translation.meta(key);
+                let name = meta("name")?.unwrap_or_else(|| id.to_owned());
+                let mut legal = Vec::new();
+                for key in ["licence", "attribution", "notice"] {
+                    legal.extend(meta(key)?);
+                }
+                Ok(TranslationInfo {
+                    id: id.to_owned(),
+                    built_in,
+                    abbrev: meta("abbreviation")?.unwrap_or_else(|| name.clone()),
+                    language: match meta("language_name")? {
+                        Some(language) => language,
+                        None => meta("language")?.unwrap_or_default(),
+                    },
+                    licence: meta("licence")?.unwrap_or_default(),
+                    deuterocanon: translation
+                        .books()?
+                        .iter()
+                        .any(|b| b.section == Section::Deuterocanon),
+                    size: std::fs::metadata(&path).map_or(0, |m| m.len()),
+                    legal: legal.join("\n\n"),
+                    name,
+                    path: path.clone(),
+                })
+            });
+            // One damaged file should not hide the others.
+            match info {
+                Ok(info) => found.push(info),
+                Err(err) => glib::g_warning!("selah", "Skipping {}: {err}", path.display()),
             }
-            Ok(TranslationInfo {
-                id: id.to_owned(),
-                name,
-                abbrev,
-                legal: legal.join("\n\n"),
-            })
-        });
-        // One damaged file should not hide the others.
-        match info {
-            Ok(info) => found.push(info),
-            Err(err) => glib::g_warning!("selah", "Skipping {}: {err}", path.display()),
         }
     }
     found.sort_by(|a, b| a.name.cmp(&b.name));
@@ -744,7 +780,14 @@ impl SelahWindow {
 
     /// The open translation's database file.
     pub(super) fn translation_path(&self) -> PathBuf {
-        translations_dir().join(format!("{}.sqlite", self.imp().translation_id.borrow()))
+        let imp = self.imp();
+        let id = imp.translation_id.borrow();
+        imp.translations
+            .borrow()
+            .iter()
+            .find(|t| t.id == *id)
+            .map(|t| t.path.clone())
+            .unwrap_or_default()
     }
 
     fn setup_translations(&self) {
@@ -764,7 +807,12 @@ impl SelahWindow {
             }
         ));
         self.add_action(&action);
+        self.setup_translation_actions();
+        self.reload_translations();
+    }
 
+    /// Finds the translations again, after start-up, an import or a removal.
+    pub(super) fn reload_translations(&self) {
         glib::spawn_future_local(glib::clone!(
             #[weak(rename_to = win)]
             self,
@@ -791,7 +839,9 @@ impl SelahWindow {
             button.set_menu_model(Some(&menu));
         }
 
-        // Only a bundled id is used, never the stored text as a path.
+        let current = imp.translation_id.borrow().clone();
+        let still_open = found.iter().any(|t| t.id == current);
+        // Only a found id is used, never the stored text as a path.
         let wanted = self.settings().string("translation");
         let id = [wanted.as_str(), DEFAULT_TRANSLATION]
             .into_iter()
@@ -799,28 +849,26 @@ impl SelahWindow {
             .unwrap_or(&found[0].id)
             .to_owned();
         *imp.translations.borrow_mut() = found;
-        self.open_translation(&id, None);
+        self.refresh_translations_dialog();
+        if !still_open {
+            self.open_translation(&id, None);
+        }
     }
 
     /// Opens another translation at the same place, as far as it has it.
-    fn switch_translation(&self, id: &str) {
-        let imp = self.imp();
-        if *imp.translation_id.borrow() == id {
+    pub(super) fn switch_translation(&self, id: &str) {
+        if *self.imp().translation_id.borrow() == id {
             return;
         }
-        let place = imp.current.get().and_then(|(book, chapter)| {
-            Some(Ref {
-                book: imp.books.borrow().get(book)?.id.clone(),
-                chapter,
-                verse: None,
-            })
-        });
-        self.open_translation(id, place.map(|r| (self.translation_path(), r)));
+        // The open chapter's canonical reference, so the old file is not needed.
+        let place = self.canonical_ref(None);
+        self.open_translation(id, Some(place));
     }
 
-    /// Loads translation `id`. `place` is a chapter in another translation's
-    /// file to open here; without it the last position is resumed.
-    fn open_translation(&self, id: &str, place: Option<(PathBuf, Ref)>) {
+    /// Loads translation `id`. `place` is a canonical chapter or verse to open
+    /// in it (`Some(None)` when switching without one); `None` resumes the
+    /// last position.
+    pub(super) fn open_translation(&self, id: &str, place: Option<Option<Ref>>) {
         let imp = self.imp();
         let Some(info) = imp
             .translations
@@ -840,13 +888,8 @@ impl SelahWindow {
             async move {
                 let result = gio::spawn_blocking(move || {
                     let translation = Translation::open(&path)?;
-                    let target = match place {
-                        Some((from, place)) => {
-                            match Translation::open(&from)?.to_canonical(&place)? {
-                                Some(canonical) => translation.from_canonical(&canonical)?,
-                                None => None,
-                            }
-                        }
+                    let target = match place.flatten() {
+                        Some(canonical) => translation.from_canonical(&canonical)?,
                         None => None,
                     };
                     Ok::<_, selah_core::Error>((translation.books()?, target))
@@ -898,7 +941,9 @@ impl SelahWindow {
         self.populate_sidebar();
 
         match target {
-            Some(target) => self.open_chapter_by_id(&target.book, target.chapter, None),
+            Some(target) => {
+                self.open_chapter_by_id(&target.book, target.chapter, target.verse.map(|v| (v, v)))
+            }
             // The place is missing here: start at the first book.
             None if switched => {
                 let first = imp
