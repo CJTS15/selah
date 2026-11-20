@@ -45,6 +45,13 @@ impl SelahWindow {
             Err(err) => {
                 glib::g_warning!("selah", "Could not open saved verses: {err}");
                 self.toast(&gettext("Saved verses are unavailable"));
+                // Not "Nothing Saved Yet": the saved verses may exist but cannot be read.
+                let empty = &self.imp().saved_empty;
+                empty.set_icon_name(Some("dialog-error-symbolic"));
+                empty.set_title(&gettext("Saved Verses Unavailable"));
+                empty.set_description(Some(&gettext(
+                    "Highlights, bookmarks and notes could not be opened",
+                )));
             }
         }
     }

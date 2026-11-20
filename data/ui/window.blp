@@ -411,6 +411,17 @@ template $SelahWindow: Adw.ApplicationWindow {
                     child: Adw.StatusPage error_page {
                       icon-name: "dialog-error-symbolic";
                       title: _("Could Not Open the Bible");
+
+                      child: Button {
+                        label: _("_Manage Translations");
+                        use-underline: true;
+                        action-name: "win.translations";
+                        halign: center;
+
+                        styles [
+                          "pill",
+                        ]
+                      };
                     };
                   }
                 };

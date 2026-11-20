@@ -103,6 +103,8 @@ mod imp {
         #[template_child]
         pub reader_stack: TemplateChild<gtk::Stack>,
         #[template_child]
+        pub saved_empty: TemplateChild<adw::StatusPage>,
+        #[template_child]
         pub scrolled: TemplateChild<gtk::ScrolledWindow>,
         #[template_child]
         pub text_view: TemplateChild<gtk::TextView>,
@@ -952,7 +954,7 @@ impl SelahWindow {
         else {
             return;
         };
-        *imp.translation_id.borrow_mut() = info.id.clone();
+        let previous = imp.translation_id.replace(info.id.clone());
         let path = self.translation_path();
         let switched = place.is_some();
         glib::spawn_future_local(glib::clone!(
@@ -974,6 +976,13 @@ impl SelahWindow {
                 }
                 match result {
                     Ok(Ok((books, target))) => win.show_translation(&info, books, target, switched),
+                    // A failed switch keeps the translation on screen.
+                    Ok(Err(err)) if switched && !previous.is_empty() && previous != info.id => {
+                        glib::g_warning!("selah", "Could not open {}: {err}", info.id);
+                        *win.imp().translation_id.borrow_mut() = previous;
+                        // Translators: {name} is a translation name.
+                        win.toast(&gettext("Could not open {name}").replace("{name}", &info.name));
+                    }
                     Ok(Err(err)) => win.show_error(&err.to_string()),
                     Err(panic) => std::panic::resume_unwind(panic),
                 }
@@ -1306,6 +1315,9 @@ impl SelahWindow {
         imp.error_page
             .set_description(Some(&glib::markup_escape_text(message)));
         imp.reader_stack.set_visible_child_name("error");
+        // Search and Saved fail on the same damaged file; show why.
+        imp.content_stack.set_visible_child_name("reading");
+        imp.split_view.set_show_content(true);
     }
 
     fn show_about(&self) {
