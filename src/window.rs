@@ -87,6 +87,8 @@ mod imp {
         #[template_child]
         pub translation_button: TemplateChild<gtk::MenuButton>,
         #[template_child]
+        pub sidebar_translation_button: TemplateChild<gtk::MenuButton>,
+        #[template_child]
         pub reader_stack: TemplateChild<gtk::Stack>,
         #[template_child]
         pub scrolled: TemplateChild<gtk::ScrolledWindow>,
@@ -785,8 +787,9 @@ impl SelahWindow {
             item.set_action_and_target_value(Some("win.translation"), Some(&info.id.to_variant()));
             menu.append_item(&item);
         }
-        imp.translation_button.set_menu_model(Some(&menu));
-        imp.translation_button.set_visible(found.len() > 1);
+        for button in [&*imp.translation_button, &*imp.sidebar_translation_button] {
+            button.set_menu_model(Some(&menu));
+        }
 
         // Only a bundled id is used, never the stored text as a path.
         let wanted = self.settings().string("translation");
@@ -876,11 +879,12 @@ impl SelahWindow {
         if let Some(action) = self.lookup_action("translation") {
             action.change_state(&info.id.to_variant());
         }
-        imp.translation_button.set_label(&info.abbrev);
         // Translators: accessible label of the translation picker; {name} is a translation.
         let label = gettext("Translation: {name}").replace("{name}", &info.name);
-        imp.translation_button
-            .update_property(&[gtk::accessible::Property::Label(&label)]);
+        for button in [&*imp.translation_button, &*imp.sidebar_translation_button] {
+            button.set_label(&info.abbrev);
+            button.update_property(&[gtk::accessible::Property::Label(&label)]);
+        }
         imp.reader_title.set_subtitle(&info.name);
         *imp.translation_name.borrow_mut() = info.name.clone();
         *imp.translation_abbrev.borrow_mut() = info.abbrev.clone();
