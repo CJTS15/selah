@@ -1,0 +1,59 @@
+using Gtk 4.0;
+using Adw 1;
+// Loaded with GtkBuilder; the title ("Note on John 3:16") and text are set from code.
+Adw.Dialog dialog {
+  content-width: 480;
+  content-height: 360;
+
+  child: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      show-start-title-buttons: false;
+      show-end-title-buttons: false;
+
+      [start]
+      Button cancel_button {
+        label: _("_Cancel");
+        use-underline: true;
+      }
+
+      [end]
+      Button save_button {
+        label: _("_Save");
+        use-underline: true;
+
+        styles [
+          "suggested-action",
+        ]
+      }
+    }
+
+    content: ScrolledWindow {
+      child: TextView note_text {
+        wrap-mode: word_char;
+        top-margin: 12;
+        bottom-margin: 12;
+        left-margin: 12;
+        right-margin: 12;
+
+        accessibility {
+          label: _("Note");
+        }
+      };
+    };
+
+    [bottom]
+    Button delete_button {
+      visible: false;
+      label: _("_Delete Note");
+      use-underline: true;
+      halign: center;
+      margin-top: 6;
+      margin-bottom: 12;
+
+      styles [
+        "destructive-action",
+      ]
+    }
+  };
+}

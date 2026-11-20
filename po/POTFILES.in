@@ -1,11 +1,13 @@
 data/selah.desktop.in.in
 data/selah.metainfo.xml.in.in
+data/ui/note-dialog.blp
 data/ui/preferences-dialog.blp
 data/ui/shortcuts-dialog.blp
 data/ui/translations-dialog.blp
 data/ui/window.blp
 src/window.rs
 src/window/catalog.rs
+src/window/notes.rs
 src/window/preferences.rs
 src/window/saved.rs
 src/window/search.rs

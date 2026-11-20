@@ -87,7 +87,7 @@ impl SelahWindow {
     }
 
     /// Draws the open chapter again, keeping the verse at the top in view.
-    fn rerender_chapter(&self) {
+    pub(super) fn rerender_chapter(&self) {
         let imp = self.imp();
         let Some((index, chapter)) = imp.current.get() else {
             return;

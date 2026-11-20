@@ -53,6 +53,7 @@ fn main() -> glib::ExitCode {
     app.set_accels_for_action("win.bookmark-verse", &["<Control>d"]);
     app.set_accels_for_action("win.caret-browsing", &["F7"]);
     app.set_accels_for_action("win.preferences", &["<Control>comma"]);
+    app.set_accels_for_action("win.edit-note", &["<Control>n"]);
     app.set_accels_for_action("win.search", &["<Control>f", "<Control>l"]);
     app.set_accels_for_action("win.zoom-reset", &["<Control>0", "<Control>KP_0"]);
 

@@ -13,6 +13,7 @@ use selah_core::user::{Annotation, Filter, Ref, UserDb};
 use crate::config;
 
 mod catalog;
+mod notes;
 mod preferences;
 mod saved;
 mod search;
@@ -215,6 +216,7 @@ mod imp {
             obj.setup_verse_actions();
             obj.setup_saved();
             obj.setup_preferences();
+            obj.setup_notes();
             obj.update_navigation();
 
             self.split_view.connect_collapsed_notify(glib::clone!(
@@ -1124,6 +1126,7 @@ impl SelahWindow {
         let mut first_line = true;
         let numbers = self.settings().boolean("verse-numbers");
         let one_per_line = self.settings().string("verse-layout") == "lines";
+        let notes = self.note_verses(content);
         // Character offsets of the requested verses, for selection.
         let mut selection: Option<(i32, i32)> = None;
         let mut ranges = Vec::with_capacity(content.verses.len());
@@ -1162,6 +1165,12 @@ impl SelahWindow {
                 buffer.insert(&mut end, "\u{2009}");
             }
             buffer.insert(&mut end, &verse.text);
+            if notes.contains(&verse.verse) {
+                buffer.insert(&mut end, "\u{2009}");
+                let anchor = buffer.create_child_anchor(&mut end);
+                imp.text_view
+                    .add_child_at_anchor(&self.note_mark(verse.verse), &anchor);
+            }
             ranges.push((verse.verse, verse_start, end.offset()));
             if let Some((first, last)) = verses
                 && (first..=last).contains(&verse.verse)
@@ -1198,6 +1207,27 @@ impl SelahWindow {
             }
             None => imp.scrolled.vadjustment().set_value(0.0),
         }
+    }
+
+    /// The small button after a verse with a note, which opens the note.
+    fn note_mark(&self, verse: u32) -> gtk::Button {
+        let button = gtk::Button::builder()
+            .icon_name("document-edit-symbolic")
+            .tooltip_text(gettext("Note"))
+            .valign(gtk::Align::Center)
+            .css_classes(["flat", "circular", "note-mark"])
+            .build();
+        if let Some(title) = self.verse_title(verse) {
+            // Translators: accessible label of the note mark; {reference} is a verse.
+            let label = gettext("Note on {reference}").replace("{reference}", &title);
+            button.update_property(&[gtk::accessible::Property::Label(&label)]);
+        }
+        button.connect_clicked(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            move |_| win.open_note_dialog(verse)
+        ));
+        button
     }
 
     fn show_error(&self, message: &str) {

@@ -16,12 +16,13 @@ struct Shown {
     elsewhere: Option<(String, String)>,
 }
 
-/// Sidebar filter rows: All, Bookmarks, then one per colour.
+/// Sidebar filter rows: All, Bookmarks, Notes, then one per colour.
 fn filter_at(index: i32) -> Option<Filter> {
     match index {
         0 => Some(Filter::All),
         1 => Some(Filter::Bookmarks),
-        i => usize::try_from(i - 2)
+        2 => Some(Filter::Notes),
+        i => usize::try_from(i - 3)
             .ok()
             .and_then(|i| Colour::ALL.get(i))
             .map(|&c| Filter::Colour(c)),
@@ -32,8 +33,9 @@ fn filter_index(filter: Filter) -> i32 {
     match filter {
         Filter::All => 0,
         Filter::Bookmarks => 1,
+        Filter::Notes => 2,
         Filter::Colour(colour) => {
-            2 + Colour::ALL
+            3 + Colour::ALL
                 .iter()
                 .position(|&c| c == colour)
                 .and_then(|i| i32::try_from(i).ok())
@@ -127,8 +129,9 @@ impl SelahWindow {
         while let Some(child) = list.first_child() {
             list.remove(&child);
         }
-        let (bookmarks, colours) = self.with_db(|db| db.counts()).unwrap_or_default();
-        let total = bookmarks + colours.iter().map(|(_, n)| n).sum::<usize>();
+        let counts = self.with_db(|db| db.counts()).unwrap_or_default();
+        let total =
+            counts.bookmarks + counts.notes + counts.colours.iter().map(|(_, n)| n).sum::<usize>();
 
         let mut rows: Vec<(gtk::Widget, String, usize)> = vec![
             (
@@ -139,10 +142,15 @@ impl SelahWindow {
             (
                 gtk::Image::from_icon_name("user-bookmarks-symbolic").upcast(),
                 gettext("Bookmarks"),
-                bookmarks,
+                counts.bookmarks,
+            ),
+            (
+                gtk::Image::from_icon_name("document-edit-symbolic").upcast(),
+                gettext("Notes"),
+                counts.notes,
             ),
         ];
-        for (colour, count) in colours {
+        for (colour, count) in counts.colours {
             rows.push((colour_dot(colour).upcast(), colour_name(colour), count));
         }
         for (icon, name, count) in rows {
@@ -190,6 +198,7 @@ impl SelahWindow {
         let title = match filter {
             Filter::All => gettext("All Saved"),
             Filter::Bookmarks => gettext("Bookmarks"),
+            Filter::Notes => gettext("Notes"),
             // Translators: {colour} is a highlight colour name such as "Yellow".
             Filter::Colour(colour) => {
                 gettext("{colour} Highlights").replace("{colour}", &colour_name(colour))
@@ -355,8 +364,12 @@ impl SelahWindow {
                 .build();
             let prefix: gtk::Widget = match (item.kind, item.colour) {
                 (Kind::Highlight, Some(colour)) => colour_dot(colour).upcast(),
-                _ => gtk::Image::builder()
-                    .icon_name("user-bookmarks-symbolic")
+                (kind, _) => gtk::Image::builder()
+                    .icon_name(if kind == Kind::Note {
+                        "document-edit-symbolic"
+                    } else {
+                        "user-bookmarks-symbolic"
+                    })
                     .valign(gtk::Align::Center)
                     .css_classes(["accent"])
                     .build()
@@ -376,6 +389,13 @@ impl SelahWindow {
                     .build(),
             );
             let body = match (text, present) {
+                // A note shows what was written; the verse is one tap away.
+                _ if item.kind == Kind::Note => gtk::Label::builder()
+                    .label(item.body.as_deref().unwrap_or_default())
+                    .wrap(true)
+                    .wrap_mode(pango::WrapMode::WordChar)
+                    .xalign(0.0)
+                    .build(),
                 _ if hidden => gtk::Label::builder()
                     .label(gettext("Hidden: Show Deuterocanon is off"))
                     .xalign(0.0)
