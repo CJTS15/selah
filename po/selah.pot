@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: selah\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-20 17:13+0800\n"
+"POT-Creation-Date: 2026-11-20 17:23+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -35,7 +35,78 @@ msgstr ""
 #: data/selah.metainfo.xml.in.in:9
 msgid ""
 "Selah is a local-first Bible reader. It works offline from the first launch "
-"and keeps your notes on your device."
+"and keeps your highlights, bookmarks and notes on your device."
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:14
+msgid "King James Version and World English Bible built in"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:15
+msgid ""
+"More openly licensed translations from the Selah catalogue, checked before "
+"they are installed"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:16
+msgid "Search by words or go straight to a reference such as “Ps 23”"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:17
+msgid ""
+"Highlights in five colours, bookmarks and notes, kept across translations"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:18
+msgid "A verse of the day"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:19
+msgid "Read aloud, verse by verse, in most languages"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:20
+msgid ""
+"Comfortable reading: font, size, line spacing, verse layout, light and dark "
+"styles"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:21
+msgid "Right-to-left translations, and a layout that fits phones"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:23
+msgid ""
+"No account and no tracking. Selah only goes online to fetch the translation "
+"catalogue and the translations you choose."
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:39
+msgid "Read with highlights, bookmarks and notes"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:43
+msgid "Search the whole Bible or one part of it"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:47
+msgid "Find your highlights, bookmarks and notes again"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:51
+msgid "Add openly licensed translations"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:55
+msgid "Listen verse by verse, in light or dark style"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:59
+msgid "Fits phones and narrow windows"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:70
+msgid "First release."
 msgstr ""
 
 #: data/ui/note-dialog.blp:16 src/window/translations.rs:413
