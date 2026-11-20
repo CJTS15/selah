@@ -134,6 +134,8 @@ mod imp {
         /// First activatable row in the search results, for the Down key.
         pub first_result: RefCell<Option<gtk::ListBoxRow>>,
         pub translation_abbrev: RefCell<String>,
+        /// The open translation runs right to left; the UI keeps the system's direction.
+        pub text_rtl: Cell<bool>,
         /// Highlights and bookmarks; `None` if the user database could not open.
         pub user_db: RefCell<Option<UserDb>>,
         /// The chapter on screen, for copying verse text.
@@ -307,6 +309,8 @@ pub struct TranslationInfo {
     pub language: String,
     /// The metadata's language code, such as `eng`.
     pub language_code: String,
+    /// The text runs right to left (`direction=rtl` in the metadata).
+    pub rtl: bool,
     pub licence: String,
     /// Source date from the catalogue, such as `2026-10-30`; empty if unknown.
     pub version: String,
@@ -363,6 +367,7 @@ fn find_translations() -> Result<Vec<TranslationInfo>, selah_core::Error> {
                         None => meta("language")?.unwrap_or_default(),
                     },
                     language_code: meta("language")?.unwrap_or_default(),
+                    rtl: meta("direction")?.as_deref() == Some("rtl"),
                     licence: meta("licence")?.unwrap_or_default(),
                     version: meta("version")?.unwrap_or_default(),
                     deuterocanon: translation
@@ -999,6 +1004,9 @@ impl SelahWindow {
         imp.reader_title.set_subtitle(&info.name);
         *imp.translation_name.borrow_mut() = info.name.clone();
         *imp.translation_abbrev.borrow_mut() = info.abbrev.clone();
+        imp.text_rtl.set(info.rtl);
+        imp.text_view.set_direction(self.text_direction());
+        imp.daily_text.set_direction(self.text_direction());
         self.update_sidebar_subtitle();
 
         imp.book_list.remove_all();
@@ -1053,6 +1061,15 @@ impl SelahWindow {
         };
         if let Some((book, chapter)) = target {
             self.open_chapter(book, chapter, None);
+        }
+    }
+
+    /// Text direction of the open translation, for widgets showing its text.
+    fn text_direction(&self) -> gtk::TextDirection {
+        if self.imp().text_rtl.get() {
+            gtk::TextDirection::Rtl
+        } else {
+            gtk::TextDirection::Ltr
         }
     }
 

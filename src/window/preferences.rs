@@ -241,6 +241,7 @@ impl SelahWindow {
     fn fill_preview(&self, preview: &gtk::TextView) {
         let numbers = self.settings().boolean("verse-numbers");
         let path = self.translation_path();
+        preview.set_direction(self.text_direction());
         glib::spawn_future_local(glib::clone!(
             #[weak]
             preview,
