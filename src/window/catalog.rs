@@ -17,6 +17,8 @@ const MAX_CATALOG: usize = 1024 * 1024;
 enum Download {
     /// Bytes received so far.
     Running(u64),
+    /// All bytes in; checking and installing can no longer be cancelled.
+    Installing,
     Failed(String),
 }
 
@@ -279,7 +281,10 @@ impl SelahWindow {
         };
         {
             let mut state = self.imp().catalog.borrow_mut();
-            if matches!(state.downloads.get(id), Some(Download::Running(_))) {
+            if matches!(
+                state.downloads.get(id),
+                Some(Download::Running(_) | Download::Installing)
+            ) {
                 return;
             }
             state.downloads.insert(id.to_owned(), Download::Running(0));
@@ -300,11 +305,19 @@ impl SelahWindow {
             async move {
                 let id = entry.id.clone();
                 let result = match win.fetch_package(&entry).await {
-                    Ok(data) => gio::spawn_blocking(move || {
-                        verify_and_install(&entry, &data, &installed_dir(), &built_in)
-                    })
-                    .await
-                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+                    Ok(data) => {
+                        win.imp()
+                            .catalog
+                            .borrow_mut()
+                            .downloads
+                            .insert(id.clone(), Download::Installing);
+                        win.refresh_available_row(&id);
+                        gio::spawn_blocking(move || {
+                            verify_and_install(&entry, &data, &installed_dir(), &built_in)
+                        })
+                        .await
+                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+                    }
                     Err(err) => Err(err),
                 };
                 win.imp().catalog.borrow_mut().tasks.remove(&id);
@@ -373,6 +386,9 @@ impl SelahWindow {
     fn cancel_download(&self, id: &str) {
         let task = {
             let mut state = self.imp().catalog.borrow_mut();
+            if matches!(state.downloads.get(id), Some(Download::Installing)) {
+                return;
+            }
             state.downloads.remove(id);
             state.tasks.remove(id)
         };
@@ -407,6 +423,12 @@ fn update_row(
             gettext("Downloading {received} of {total}")
                 .replace("{received}", &glib::format_size(*received))
                 .replace("{total}", &size),
+            "process-stop-symbolic",
+            gettext("Cancel Download"),
+            "win.cancel-download",
+        ),
+        Some(Download::Installing) => (
+            gettext("Installing…"),
             "process-stop-symbolic",
             gettext("Cancel Download"),
             "win.cancel-download",
@@ -447,6 +469,7 @@ fn update_row(
     button.update_property(&[gtk::accessible::Property::Label(&label)]);
     button.set_action_name(Some(action));
     button.set_action_target_value(Some(&entry.id.to_variant()));
+    button.set_sensitive(!matches!(download, Some(Download::Installing)));
 }
 
 /// Checks the sha256 the catalogue promised, then installs the package in `dir`.
