@@ -743,5 +743,24 @@ mod tests {
         assert_eq!(from("SIR.33.31").as_deref(), Some("SIR.33.32"));
         // The only combined verse with text.
         assert_eq!(from("4MA.8.29").as_deref(), Some("4MA.8.28"));
+
+        // Every mapping target is a real KJV verse, so no key is a typo.
+        let kjv = kjv();
+        let mut stmt = web
+            .conn
+            .prepare("SELECT canon_book, canon_chapter, canon_verse FROM verse_map WHERE canon_book IS NOT NULL")
+            .unwrap();
+        let targets: Vec<(String, u32, u32)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(targets.len() > 200);
+        for (book, chapter, verse) in targets {
+            assert!(
+                kjv.verse_text(&book, chapter, verse).unwrap().is_some(),
+                "{book} {chapter}:{verse}"
+            );
+        }
     }
 }
