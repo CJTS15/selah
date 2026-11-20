@@ -16,6 +16,7 @@ mod catalog;
 mod daily;
 mod notes;
 mod preferences;
+mod read_aloud;
 mod saved;
 mod search;
 mod translations;
@@ -107,6 +108,12 @@ mod imp {
         pub text_view: TemplateChild<gtk::TextView>,
         #[template_child]
         pub error_page: TemplateChild<adw::StatusPage>,
+        #[template_child]
+        pub read_bar: TemplateChild<gtk::ActionBar>,
+        #[template_child]
+        pub read_pause: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub read_label: TemplateChild<gtk::Label>,
         pub settings: OnceCell<gio::Settings>,
         pub books: RefCell<Vec<BookInfo>>,
         /// Every book of the open translation, including any the preferences hide.
@@ -148,6 +155,8 @@ mod imp {
         pub http: OnceCell<soup::Session>,
         /// Verse to keep at the top when the open chapter is drawn again.
         pub keep_in_view: Cell<Option<u32>>,
+        /// Read aloud: the verse being read, playback and what comes next.
+        pub read_aloud: RefCell<read_aloud::ReadAloud>,
         /// Today's verse in the open translation, once loaded.
         pub daily_verse: RefCell<Option<Ref>>,
     }
@@ -229,6 +238,7 @@ mod imp {
             obj.setup_preferences();
             obj.setup_notes();
             obj.setup_daily_verse();
+            obj.setup_read_aloud();
             obj.update_navigation();
 
             self.split_view.connect_collapsed_notify(glib::clone!(
@@ -295,6 +305,8 @@ pub struct TranslationInfo {
     pub abbrev: String,
     /// The language's own name if the metadata has one, else its code.
     pub language: String,
+    /// The metadata's language code, such as `eng`.
+    pub language_code: String,
     pub licence: String,
     /// Source date from the catalogue, such as `2026-10-30`; empty if unknown.
     pub version: String,
@@ -350,6 +362,7 @@ fn find_translations() -> Result<Vec<TranslationInfo>, selah_core::Error> {
                         Some(language) => language,
                         None => meta("language")?.unwrap_or_default(),
                     },
+                    language_code: meta("language")?.unwrap_or_default(),
                     licence: meta("licence")?.unwrap_or_default(),
                     version: meta("version")?.unwrap_or_default(),
                     deuterocanon: translation
@@ -1069,6 +1082,7 @@ impl SelahWindow {
             return;
         };
         imp.current.set(Some((index, chapter)));
+        self.reading_chapter_opened();
         // Verse actions wait for the new chapter's canonical references.
         *imp.chapter_content.borrow_mut() = None;
         // A jump from the search page remembers what was searched.
@@ -1208,6 +1222,7 @@ impl SelahWindow {
         imp.active_verse.set(None);
         self.apply_highlights();
         self.update_chapter_bookmark();
+        self.reading_chapter_shown();
 
         let title = format!("{} {chapter}", book.name);
         imp.reader_page.set_title(&title);

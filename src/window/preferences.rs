@@ -8,6 +8,7 @@ use super::*;
 const FONTS: &[&str] = &["serif", "sans"];
 const SPACINGS: &[&str] = &["comfortable", "compact", "spacious"];
 const LAYOUTS: &[&str] = &["paragraphs", "lines"];
+const SPEEDS: &[&str] = &["normal", "slower", "faster"];
 
 /// Binds a string setting with fixed `values` to a combo row showing `labels`.
 fn bind_choice(
@@ -145,6 +146,13 @@ impl SelahWindow {
             &builder.object("verse_layout_row").expect(expect),
             LAYOUTS,
             &[gettext("Paragraphs"), gettext("One Verse per Line")],
+        );
+        bind_choice(
+            settings,
+            "read-speed",
+            &builder.object("read_speed_row").expect(expect),
+            SPEEDS,
+            &[gettext("Normal"), gettext("Slower"), gettext("Faster")],
         );
         for (key, row) in [
             ("verse-numbers", "verse_numbers_row"),

@@ -6,6 +6,7 @@ pub mod catalog;
 pub mod daily;
 pub mod import;
 pub mod refs;
+pub mod speech;
 pub mod store;
 pub mod user;
 pub mod versification;

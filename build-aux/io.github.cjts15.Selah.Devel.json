@@ -8,6 +8,7 @@
   "finish-args": [
     "--share=ipc",
     "--share=network",
+    "--socket=pulseaudio",
     "--socket=fallback-x11",
     "--socket=wayland",
     "--device=dri"
@@ -28,6 +29,39 @@
     "*.la"
   ],
   "modules": [
+    {
+      "name": "espeak-ng",
+      "buildsystem": "cmake-ninja",
+      "config-opts": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DUSE_LIBPCAUDIO=OFF",
+        "-DUSE_MBROLA=OFF",
+        "-DUSE_LIBSONIC=OFF",
+        "-DUSE_ASYNC=OFF",
+        "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
+        "-DFETCHCONTENT_SOURCE_DIR_SONIC-GIT=/run/build/espeak-ng/sonic"
+      ],
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/espeak-ng/espeak-ng.git",
+          "tag": "1.52.0",
+          "commit": "4870adfa25b1a32b4361592f1be8a40337c58d6c"
+        },
+        {
+          "type": "git",
+          "url": "https://github.com/waywardgeek/sonic.git",
+          "commit": "fbf75c3d6d846bad3bb3d456cbc5d07d9fd8c104",
+          "dest": "sonic"
+        }
+      ],
+      "cleanup": [
+        "/include",
+        "/lib/pkgconfig",
+        "/share/vim",
+        "*.a"
+      ]
+    },
     {
       "name": "selah",
       "buildsystem": "meson",

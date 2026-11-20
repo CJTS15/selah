@@ -106,3 +106,13 @@
 .daily-text {
   font-size: 1.1em;
 }
+
+/* Read aloud: the play/pause button is the big one, as in music players. */
+.read-play {
+  min-width: 48px;
+  min-height: 48px;
+}
+
+.read-play image {
+  -gtk-icon-size: 20px;
+}
