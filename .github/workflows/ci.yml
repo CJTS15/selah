@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Format, lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # selah-core links the system SQLite (with FTS5).
+      - run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - run: cargo fmt --all --check
+      # The app crate needs GTK 4.24 and libadwaita 1.10, which the runner
+      # lacks; it is compiled in the Flatpak job instead.
+      - run: cargo clippy -p selah-core --all-targets -- -D warnings
+      - run: cargo test -p selah-core
+
+  flatpak:
+    name: Flatpak
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v6
+      # Also validates the desktop file, metainfo and settings schema
+      # (meson tests; the selah module sets run-tests).
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: build-aux/io.github.cjts15.Selah.Devel.json
+          bundle: selah.flatpak
