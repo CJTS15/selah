@@ -34,6 +34,9 @@ template $SelahWindow: Adw.ApplicationWindow {
       search_books_button.visible: true;
       saved_header.show-back-button: false;
       saved_books_button.visible: true;
+      // The reader header has no room for the picker on phones.
+      translation_button.visible: false;
+      sidebar_translation_button.visible: true;
     }
   }
 
@@ -47,6 +50,15 @@ template $SelahWindow: Adw.ApplicationWindow {
         child: Adw.ToolbarView {
           [top]
           Adw.HeaderBar {
+            // Shown instead of the reader's picker on narrow widths.
+
+            [start]
+            MenuButton sidebar_translation_button {
+              always-show-arrow: true;
+              tooltip-text: _("Translation");
+              visible: false;
+            }
+
             title-widget: Adw.WindowTitle sidebar_title {
               title: _("Selah");
             };
@@ -273,9 +285,7 @@ template $SelahWindow: Adw.ApplicationWindow {
                     }
                   }
 
-                  title-widget: Adw.WindowTitle reader_title {};
-
-                  [end]
+                  [start]
                   ToggleButton {
                     icon-name: "user-bookmarks-symbolic";
                     tooltip-text: _("Bookmark Chapter");
@@ -286,6 +296,8 @@ template $SelahWindow: Adw.ApplicationWindow {
                     }
                   }
 
+                  title-widget: Adw.WindowTitle reader_title {};
+
                   [end]
                   Button {
                     icon-name: "system-search-symbolic";
@@ -295,6 +307,14 @@ template $SelahWindow: Adw.ApplicationWindow {
                     accessibility {
                       label: _("Search");
                     }
+                  }
+
+                  // Label and menu are set from the installed translations.
+
+                  [end]
+                  MenuButton translation_button {
+                    always-show-arrow: true;
+                    tooltip-text: _("Translation");
                   }
                 }
 

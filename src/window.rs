@@ -6,9 +6,9 @@ use adw::subclass::prelude::*;
 use gettextrs::{gettext, ngettext};
 use gtk::{gio, glib, pango};
 use selah_core::books::Section;
-use selah_core::import::HeadingKind;
+use selah_core::import::{HeadingKind, Verse};
 use selah_core::store::{self, BookInfo, Chapter, Translation};
-use selah_core::user::{Annotation, Filter, UserDb};
+use selah_core::user::{Annotation, Filter, Ref, UserDb};
 
 use crate::config;
 
@@ -85,6 +85,10 @@ mod imp {
         #[template_child]
         pub reader_title: TemplateChild<adw::WindowTitle>,
         #[template_child]
+        pub translation_button: TemplateChild<gtk::MenuButton>,
+        #[template_child]
+        pub sidebar_translation_button: TemplateChild<gtk::MenuButton>,
+        #[template_child]
         pub reader_stack: TemplateChild<gtk::Stack>,
         #[template_child]
         pub scrolled: TemplateChild<gtk::ScrolledWindow>,
@@ -94,9 +98,11 @@ mod imp {
         pub error_page: TemplateChild<adw::StatusPage>,
         pub settings: OnceCell<gio::Settings>,
         pub books: RefCell<Vec<BookInfo>>,
+        /// Bundled translations, by name.
+        pub translations: RefCell<Vec<TranslationInfo>>,
+        /// The open translation's id; empty until one is open.
+        pub translation_id: RefCell<String>,
         pub translation_name: RefCell<String>,
-        /// Licence, attribution and notice shown in About.
-        pub translation_legal: RefCell<String>,
         /// Book index and chapter most recently requested.
         pub current: Cell<Option<(usize, u32)>>,
         /// Book whose chapter grid is open in the sidebar.
@@ -218,7 +224,7 @@ mod imp {
                 }
             ));
 
-            obj.load_books();
+            obj.setup_translations();
         }
 
         fn dispose(&self) {
@@ -251,8 +257,66 @@ glib::wrapper! {
                     gtk::ConstraintTarget, gtk::Native, gtk::Root, gtk::ShortcutManager;
 }
 
-fn translation_path() -> PathBuf {
-    PathBuf::from(config::PKGDATADIR).join("translations/eng-kjv/translation.sqlite")
+const DEFAULT_TRANSLATION: &str = "eng-kjv";
+
+#[derive(Debug, Clone)]
+pub struct TranslationInfo {
+    pub id: String,
+    pub name: String,
+    pub abbrev: String,
+    /// Licence, attribution and notice shown in About.
+    pub legal: String,
+}
+
+fn translations_dir() -> PathBuf {
+    PathBuf::from(config::PKGDATADIR).join("translations")
+}
+
+/// Reads the metadata of every bundled translation, sorted by name.
+fn find_translations() -> Result<Vec<TranslationInfo>, selah_core::Error> {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(translations_dir())? {
+        let path = entry?.path();
+        let Some(id) = path
+            .extension()
+            .filter(|ext| *ext == "sqlite")
+            .and(path.file_stem())
+            .and_then(|stem| stem.to_str())
+        else {
+            continue;
+        };
+        let info = Translation::open(&path).and_then(|translation| {
+            let name = translation.meta("name")?.unwrap_or_else(|| id.to_owned());
+            let abbrev = translation
+                .meta("abbreviation")?
+                .unwrap_or_else(|| name.clone());
+            let mut legal = Vec::new();
+            for key in ["licence", "attribution", "notice"] {
+                legal.extend(translation.meta(key)?);
+            }
+            Ok(TranslationInfo {
+                id: id.to_owned(),
+                name,
+                abbrev,
+                legal: legal.join("\n\n"),
+            })
+        });
+        // One damaged file should not hide the others.
+        match info {
+            Ok(info) => found.push(info),
+            Err(err) => glib::g_warning!("selah", "Skipping {}: {err}", path.display()),
+        }
+    }
+    found.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(found)
+}
+
+/// The verse number as shown: "16", or "15–16" for a combined verse.
+fn verse_label(verse: &Verse) -> String {
+    match verse.verse_end {
+        Some(last) => format!("{}–{last}", verse.verse),
+        None => verse.verse.to_string(),
+    }
 }
 
 fn section_header(section: Section) -> gtk::Widget {
@@ -678,47 +742,180 @@ impl SelahWindow {
         imp.sidebar_title.set_subtitle(&subtitle);
     }
 
-    fn load_books(&self) {
-        let path = translation_path();
+    /// The open translation's database file.
+    pub(super) fn translation_path(&self) -> PathBuf {
+        translations_dir().join(format!("{}.sqlite", self.imp().translation_id.borrow()))
+    }
+
+    fn setup_translations(&self) {
+        // The radio items of the picker menu follow this action's state.
+        let action = gio::SimpleAction::new_stateful(
+            "translation",
+            Some(glib::VariantTy::STRING),
+            &"".to_variant(),
+        );
+        action.connect_activate(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            move |_, param| {
+                if let Some(id) = param.and_then(|p| p.str()) {
+                    win.switch_translation(id);
+                }
+            }
+        ));
+        self.add_action(&action);
+
+        glib::spawn_future_local(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            async move {
+                match gio::spawn_blocking(find_translations).await {
+                    Ok(Ok(found)) if !found.is_empty() => win.show_translations(found),
+                    Ok(Ok(_)) => win.show_error(&gettext("No translations are installed")),
+                    Ok(Err(err)) => win.show_error(&err.to_string()),
+                    Err(panic) => std::panic::resume_unwind(panic),
+                }
+            }
+        ));
+    }
+
+    fn show_translations(&self, found: Vec<TranslationInfo>) {
+        let imp = self.imp();
+        let menu = gio::Menu::new();
+        for info in &found {
+            let item = gio::MenuItem::new(Some(&info.name), None);
+            item.set_action_and_target_value(Some("win.translation"), Some(&info.id.to_variant()));
+            menu.append_item(&item);
+        }
+        for button in [&*imp.translation_button, &*imp.sidebar_translation_button] {
+            button.set_menu_model(Some(&menu));
+        }
+
+        // Only a bundled id is used, never the stored text as a path.
+        let wanted = self.settings().string("translation");
+        let id = [wanted.as_str(), DEFAULT_TRANSLATION]
+            .into_iter()
+            .find(|id| found.iter().any(|t| t.id == *id))
+            .unwrap_or(&found[0].id)
+            .to_owned();
+        *imp.translations.borrow_mut() = found;
+        self.open_translation(&id, None);
+    }
+
+    /// Opens another translation at the same place, as far as it has it.
+    fn switch_translation(&self, id: &str) {
+        let imp = self.imp();
+        if *imp.translation_id.borrow() == id {
+            return;
+        }
+        let place = imp.current.get().and_then(|(book, chapter)| {
+            Some(Ref {
+                book: imp.books.borrow().get(book)?.id.clone(),
+                chapter,
+                verse: None,
+            })
+        });
+        self.open_translation(id, place.map(|r| (self.translation_path(), r)));
+    }
+
+    /// Loads translation `id`. `place` is a chapter in another translation's
+    /// file to open here; without it the last position is resumed.
+    fn open_translation(&self, id: &str, place: Option<(PathBuf, Ref)>) {
+        let imp = self.imp();
+        let Some(info) = imp
+            .translations
+            .borrow()
+            .iter()
+            .find(|t| t.id == id)
+            .cloned()
+        else {
+            return;
+        };
+        *imp.translation_id.borrow_mut() = info.id.clone();
+        let path = self.translation_path();
+        let switched = place.is_some();
         glib::spawn_future_local(glib::clone!(
             #[weak(rename_to = win)]
             self,
             async move {
                 let result = gio::spawn_blocking(move || {
                     let translation = Translation::open(&path)?;
-                    let name = translation.meta("name")?.unwrap_or_default();
-                    let abbrev = translation
-                        .meta("abbreviation")?
-                        .unwrap_or_else(|| name.clone());
-                    let mut legal = Vec::new();
-                    for key in ["licence", "attribution", "notice"] {
-                        legal.extend(translation.meta(key)?);
-                    }
-                    Ok::<_, selah_core::Error>((
-                        translation.books()?,
-                        name,
-                        abbrev,
-                        legal.join("\n\n"),
-                    ))
+                    let target = match place {
+                        Some((from, place)) => {
+                            match Translation::open(&from)?.to_canonical(&place)? {
+                                Some(canonical) => translation.from_canonical(&canonical)?,
+                                None => None,
+                            }
+                        }
+                        None => None,
+                    };
+                    Ok::<_, selah_core::Error>((translation.books()?, target))
                 })
                 .await;
+                // Another translation was chosen while this one loaded.
+                if *win.imp().translation_id.borrow() != info.id {
+                    return;
+                }
                 match result {
-                    Ok(Ok((books, name, abbrev, legal))) => {
-                        let imp = win.imp();
-                        *imp.books.borrow_mut() = books;
-                        imp.reader_title.set_subtitle(&name);
-                        *imp.translation_name.borrow_mut() = name;
-                        *imp.translation_legal.borrow_mut() = legal;
-                        *imp.translation_abbrev.borrow_mut() = abbrev;
-                        win.update_sidebar_subtitle();
-                        win.populate_sidebar();
-                        win.resume();
-                    }
+                    Ok(Ok((books, target))) => win.show_translation(&info, books, target, switched),
                     Ok(Err(err)) => win.show_error(&err.to_string()),
                     Err(panic) => std::panic::resume_unwind(panic),
                 }
             }
         ));
+    }
+
+    fn show_translation(
+        &self,
+        info: &TranslationInfo,
+        books: Vec<BookInfo>,
+        target: Option<Ref>,
+        switched: bool,
+    ) {
+        let imp = self.imp();
+        if let Err(err) = self.settings().set_string("translation", &info.id) {
+            glib::g_warning!("selah", "Failed to save the translation: {err}");
+        }
+        if let Some(action) = self.lookup_action("translation") {
+            action.change_state(&info.id.to_variant());
+        }
+        // Translators: accessible label of the translation picker; {name} is a translation.
+        let label = gettext("Translation: {name}").replace("{name}", &info.name);
+        for button in [&*imp.translation_button, &*imp.sidebar_translation_button] {
+            button.set_label(&info.abbrev);
+            button.update_property(&[gtk::accessible::Property::Label(&label)]);
+        }
+        imp.reader_title.set_subtitle(&info.name);
+        *imp.translation_name.borrow_mut() = info.name.clone();
+        *imp.translation_abbrev.borrow_mut() = info.abbrev.clone();
+        self.update_sidebar_subtitle();
+
+        imp.book_list.remove_all();
+        imp.expanded.set(None);
+        imp.highlighted.replace(None);
+        imp.current.set(None);
+        *imp.books.borrow_mut() = books;
+        self.populate_sidebar();
+
+        match target {
+            Some(target) => self.open_chapter_by_id(&target.book, target.chapter, None),
+            // The place is missing here: start at the first book.
+            None if switched => {
+                let first = imp
+                    .books
+                    .borrow()
+                    .first()
+                    .and_then(|b| b.chapters.first().copied());
+                if let Some(chapter) = first {
+                    self.open_chapter(0, chapter, None);
+                }
+            }
+            None => self.resume(),
+        }
+        self.refresh_saved();
+        if imp.content_stack.visible_child_name().as_deref() == Some("search") {
+            self.run_search();
+        }
     }
 
     fn resume(&self) {
@@ -762,6 +959,8 @@ impl SelahWindow {
             return;
         };
         imp.current.set(Some((index, chapter)));
+        // Verse actions wait for the new chapter's canonical references.
+        *imp.chapter_content.borrow_mut() = None;
         // A jump from the search page remembers what was searched.
         if imp.content_stack.visible_child_name().as_deref() == Some("search") {
             self.remember_search();
@@ -780,17 +979,20 @@ impl SelahWindow {
             glib::g_warning!("selah", "Failed to save reading position: {err}");
         }
 
-        let path = translation_path();
+        let path = self.translation_path();
         let id = book.id.clone();
         glib::spawn_future_local(glib::clone!(
             #[weak(rename_to = win)]
             self,
             async move {
+                let loaded_path = path.clone();
                 let result =
                     gio::spawn_blocking(move || Translation::open(&path)?.chapter(&id, chapter))
                         .await;
-                // A newer request replaced this one while it was loading.
-                if win.imp().current.get() != Some((index, chapter)) {
+                // A newer request or another translation replaced this one.
+                if win.imp().current.get() != Some((index, chapter))
+                    || win.translation_path() != loaded_path
+                {
                     return;
                 }
                 match result {
@@ -862,7 +1064,7 @@ impl SelahWindow {
                 buffer.insert(&mut end, " ");
             }
             let verse_start = end.offset();
-            buffer.insert_with_tags_by_name(&mut end, &verse.verse.to_string(), &["verse-number"]);
+            buffer.insert_with_tags_by_name(&mut end, &verse_label(verse), &["verse-number"]);
             // Thin space between the number and the verse.
             buffer.insert(&mut end, "\u{2009}");
             buffer.insert(&mut end, &verse.text);
@@ -884,6 +1086,7 @@ impl SelahWindow {
         *imp.chapter_content.borrow_mut() = Some(content.clone());
         imp.active_verse.set(None);
         self.apply_highlights();
+        self.update_chapter_bookmark();
 
         let title = format!("{} {chapter}", book.name);
         imp.reader_page.set_title(&title);
@@ -924,11 +1127,10 @@ impl SelahWindow {
             .copyright("© 2026 CJTS15")
             .license_type(gtk::License::Gpl30)
             .build();
-        let name = imp.translation_name.borrow();
-        if !name.is_empty() {
+        for info in imp.translations.borrow().iter() {
             // Legal text is markup; translation metadata is plain text.
-            let legal = glib::markup_escape_text(&imp.translation_legal.borrow());
-            about.add_legal_section(&name, None, gtk::License::Custom, Some(&legal));
+            let legal = glib::markup_escape_text(&info.legal);
+            about.add_legal_section(&info.name, None, gtk::License::Custom, Some(&legal));
         }
         about.present(Some(self));
     }

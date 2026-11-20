@@ -8,16 +8,22 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use crate::Error;
 use crate::books::Section;
 use crate::import::{Book, Heading, HeadingKind, Meta, Verse};
+use crate::user::Ref;
+use crate::versification::Mapping;
 
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 
 const SCHEMA: &str = "
 CREATE TABLE meta    (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE book    (id TEXT PRIMARY KEY, ord INTEGER NOT NULL, section TEXT NOT NULL,
                       name TEXT NOT NULL, abbrev TEXT NOT NULL);
 CREATE TABLE verse   (book TEXT NOT NULL, chapter INTEGER NOT NULL, verse INTEGER NOT NULL,
-                      para INTEGER NOT NULL DEFAULT 0, text TEXT NOT NULL,
+                      verse_end INTEGER, para INTEGER NOT NULL DEFAULT 0, text TEXT NOT NULL,
                       UNIQUE (book, chapter, verse));
+CREATE TABLE verse_map (book TEXT NOT NULL, chapter INTEGER NOT NULL, verse INTEGER NOT NULL,
+                      canon_book TEXT, canon_chapter INTEGER, canon_verse INTEGER,
+                      UNIQUE (book, chapter, verse));
+CREATE INDEX verse_map_canon ON verse_map (canon_book, canon_chapter, canon_verse);
 CREATE TABLE heading (book TEXT NOT NULL, chapter INTEGER NOT NULL,
                       before_verse INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL);
 CREATE INDEX heading_chapter ON heading (book, chapter);
@@ -85,21 +91,28 @@ pub struct BookInfo {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Chapter {
     pub verses: Vec<Verse>,
+    /// The canonical reference of each verse in `verses`, if it has one.
+    pub canonical: Vec<Option<Ref>>,
     pub headings: Vec<Heading>,
 }
 
 /// Writes a new translation database at `path`, which must not exist yet.
-pub fn create(path: &Path, meta: &Meta, books: &[Book]) -> Result<(), Error> {
+pub fn create(path: &Path, meta: &Meta, books: &[Book], mapping: &Mapping) -> Result<(), Error> {
     if path.exists() {
         return Err(Error::InvalidData(format!(
             "{} already exists",
             path.display()
         )));
     }
-    write(&mut Connection::open(path)?, meta, books)
+    write(&mut Connection::open(path)?, meta, books, mapping)
 }
 
-fn write(conn: &mut Connection, meta: &Meta, books: &[Book]) -> Result<(), Error> {
+fn write(
+    conn: &mut Connection,
+    meta: &Meta,
+    books: &[Book],
+    mapping: &Mapping,
+) -> Result<(), Error> {
     let tx = conn.transaction()?;
     tx.execute_batch(SCHEMA)?;
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -113,7 +126,8 @@ fn write(conn: &mut Connection, meta: &Meta, books: &[Book]) -> Result<(), Error
             "INSERT INTO book (id, ord, section, name, abbrev) VALUES (?1, ?2, ?3, ?4, ?5)",
         )?;
         let mut insert_verse = tx.prepare(
-            "INSERT INTO verse (book, chapter, verse, para, text) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO verse (book, chapter, verse, verse_end, para, text)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )?;
         let mut insert_heading = tx.prepare(
             "INSERT INTO heading (book, chapter, before_verse, kind, text)
@@ -128,7 +142,14 @@ fn write(conn: &mut Connection, meta: &Meta, books: &[Book]) -> Result<(), Error
                 book.abbrev
             ])?;
             for v in &book.verses {
-                insert_verse.execute(params![book.id, v.chapter, v.verse, v.para, v.text])?;
+                insert_verse.execute(params![
+                    book.id,
+                    v.chapter,
+                    v.verse,
+                    v.verse_end,
+                    v.para,
+                    v.text
+                ])?;
             }
             for h in &book.headings {
                 insert_heading.execute(params![
@@ -139,6 +160,21 @@ fn write(conn: &mut Connection, meta: &Meta, books: &[Book]) -> Result<(), Error
                     h.text
                 ])?;
             }
+        }
+
+        let mut insert_map = tx.prepare(
+            "INSERT INTO verse_map (book, chapter, verse, canon_book, canon_chapter, canon_verse)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )?;
+        for (from, to) in mapping {
+            insert_map.execute(params![
+                from.book,
+                from.chapter,
+                from.verse,
+                to.as_ref().map(|r| &r.book),
+                to.as_ref().map(|r| r.chapter),
+                to.as_ref().and_then(|r| r.verse)
+            ])?;
         }
     }
     tx.execute("INSERT INTO verse_fts (verse_fts) VALUES ('rebuild')", [])?;
@@ -311,18 +347,35 @@ impl Translation {
 
     pub fn chapter(&self, book: &str, chapter: u32) -> Result<Chapter, Error> {
         let mut stmt = self.conn.prepare(
-            "SELECT verse, para, text FROM verse WHERE book = ?1 AND chapter = ?2 ORDER BY verse",
+            "SELECT v.verse, v.verse_end, v.para, v.text,
+                    m.rowid IS NOT NULL, m.canon_book, m.canon_chapter, m.canon_verse
+             FROM verse v LEFT JOIN verse_map m
+               ON m.book = v.book AND m.chapter = v.chapter AND m.verse = v.verse
+             WHERE v.book = ?1 AND v.chapter = ?2 ORDER BY v.verse",
         )?;
-        let verses = stmt
+        let rows: Vec<(Verse, Option<Ref>)> = stmt
             .query_map(params![book, chapter], |row| {
-                Ok(Verse {
+                let verse = Verse {
                     chapter,
                     verse: row.get(0)?,
-                    para: row.get(1)?,
-                    text: row.get(2)?,
-                })
+                    verse_end: row.get(1)?,
+                    para: row.get(2)?,
+                    text: row.get(3)?,
+                };
+                let mapped: bool = row.get(4)?;
+                let canonical = if mapped {
+                    canonical_ref(row.get(5)?, row.get(6)?, row.get(7)?)
+                } else {
+                    Some(Ref {
+                        book: book.to_owned(),
+                        chapter,
+                        verse: Some(verse.verse),
+                    })
+                };
+                Ok((verse, canonical))
             })?
             .collect::<Result<_, _>>()?;
+        let (verses, canonical) = rows.into_iter().unzip();
 
         let mut stmt = self.conn.prepare(
             "SELECT before_verse, kind, text FROM heading
@@ -340,8 +393,110 @@ impl Translation {
                 text: row.get(2)?,
             });
         }
-        Ok(Chapter { verses, headings })
+        Ok(Chapter {
+            verses,
+            canonical,
+            headings,
+        })
     }
+
+    /// The canonical reference of a verse or chapter in this translation, or
+    /// `None` if it has none. A chapter maps through its first verse.
+    pub fn to_canonical(&self, r: &Ref) -> Result<Option<Ref>, Error> {
+        let Some(verse) = r.verse else {
+            let first: Option<u32> = self.conn.query_row(
+                "SELECT min(verse) FROM verse WHERE book = ?1 AND chapter = ?2",
+                params![r.book, r.chapter],
+                |row| row.get(0),
+            )?;
+            let Some(first) = first else { return Ok(None) };
+            let canonical = self.to_canonical(&Ref {
+                verse: Some(first),
+                ..r.clone()
+            })?;
+            return Ok(canonical.map(|c| Ref { verse: None, ..c }));
+        };
+        let mapped = self
+            .conn
+            .query_row(
+                "SELECT canon_book, canon_chapter, canon_verse FROM verse_map
+                 WHERE book = ?1 AND chapter = ?2 AND verse = ?3",
+                params![r.book, r.chapter, verse],
+                |row| Ok(canonical_ref(row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        Ok(mapped.unwrap_or_else(|| Some(r.clone())))
+    }
+
+    /// Where a canonical verse or chapter is in this translation, or `None` if
+    /// it is not. A verse inside a combined verse (`15-16`) finds that verse.
+    /// A chapter maps through its verse 1, else to the same chapter.
+    pub fn from_canonical(&self, r: &Ref) -> Result<Option<Ref>, Error> {
+        let Some(verse) = r.verse else {
+            if let Some(found) = self.from_canonical(&Ref {
+                verse: Some(1),
+                ..r.clone()
+            })? {
+                return Ok(Some(Ref {
+                    verse: None,
+                    ..found
+                }));
+            }
+            let exists = self
+                .conn
+                .query_row(
+                    "SELECT 1 FROM verse WHERE book = ?1 AND chapter = ?2 LIMIT 1",
+                    params![r.book, r.chapter],
+                    |_| Ok(()),
+                )
+                .optional()?
+                .is_some();
+            return Ok(exists.then(|| r.clone()));
+        };
+        let mapped = self
+            .conn
+            .query_row(
+                "SELECT book, chapter, verse FROM verse_map
+                 WHERE canon_book = ?1 AND canon_chapter = ?2 AND canon_verse = ?3",
+                params![r.book, r.chapter, verse],
+                |row| {
+                    Ok(Ref {
+                        book: row.get(0)?,
+                        chapter: row.get(1)?,
+                        verse: Some(row.get(2)?),
+                    })
+                },
+            )
+            .optional()?;
+        if mapped.is_some() {
+            return Ok(mapped);
+        }
+        // The same number maps to itself unless the mapping moved it away.
+        let found = self
+            .conn
+            .query_row(
+                "SELECT verse FROM verse v
+                 WHERE book = ?1 AND chapter = ?2 AND verse <= ?3
+                   AND coalesce(verse_end, verse) >= ?3
+                   AND NOT EXISTS (SELECT 1 FROM verse_map m
+                       WHERE m.book = v.book AND m.chapter = v.chapter AND m.verse = ?3)",
+                params![r.book, r.chapter, verse],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(found.map(|verse| Ref {
+            verse: Some(verse),
+            ..r.clone()
+        }))
+    }
+}
+
+fn canonical_ref(book: Option<String>, chapter: Option<u32>, verse: Option<u32>) -> Option<Ref> {
+    Some(Ref {
+        book: book?,
+        chapter: chapter?,
+        verse: Some(verse?),
+    })
 }
 
 #[cfg(test)]
@@ -350,10 +505,16 @@ mod tests {
     use crate::import::import_dir;
 
     fn kjv() -> Translation {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data/translations/eng-kjv");
-        let (meta, books) = import_dir(&dir).unwrap();
+        bundled("eng-kjv")
+    }
+
+    fn bundled(id: &str) -> Translation {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../data/translations")
+            .join(id);
+        let (meta, books, mapping) = import_dir(&dir).unwrap();
         let mut conn = Connection::open_in_memory().unwrap();
-        write(&mut conn, &meta, &books).unwrap();
+        write(&mut conn, &meta, &books, &mapping).unwrap();
         Translation::from_connection(conn).unwrap()
     }
 
@@ -517,5 +678,89 @@ mod tests {
         );
         assert_eq!(kjv.verse_text("JHN", 3, 99).unwrap(), None);
         assert!(kjv.chapter("GEN", 51).unwrap().verses.is_empty());
+    }
+
+    #[test]
+    fn canonical_mapping() {
+        use crate::import::parse_usfm;
+        use crate::versification::parse_mapping;
+
+        let books = vec![
+            parse_usfm("\\id ROM\n\\c 14\n\\v 23 Sin.\n\\v 24 Now to him.\n\\c 16\n\\v 24 Grace.\n\\v 25 \\f + \\ft TR.\\f*\n")
+                .unwrap(),
+            parse_usfm("\\id SIR\n\\c 11\n\\v 14 Good.\n\\v 15-16 Combined.\n").unwrap(),
+        ];
+        let mapping = parse_mapping("ROM 14:24 = ROM 16:25\nROM 14:23 = none").unwrap();
+        let mut conn = Connection::open_in_memory().unwrap();
+        let meta = vec![("id".to_owned(), "test".to_owned())];
+        write(&mut conn, &meta, &books, &mapping).unwrap();
+        let t = Translation::from_connection(conn).unwrap();
+
+        let r = |key: &str| Ref::parse(key).unwrap();
+        let to = |key: &str| t.to_canonical(&r(key)).unwrap().map(|r| r.key());
+        let from = |key: &str| t.from_canonical(&r(key)).unwrap().map(|r| r.key());
+
+        assert_eq!(to("ROM.14.24").as_deref(), Some("ROM.16.25"));
+        assert_eq!(to("ROM.14.23"), None);
+        assert_eq!(to("ROM.16.24").as_deref(), Some("ROM.16.24"));
+        assert_eq!(to("ROM.16").as_deref(), Some("ROM.16"));
+        assert_eq!(to("ROM.15"), None);
+
+        assert_eq!(from("ROM.16.25").as_deref(), Some("ROM.14.24"));
+        assert_eq!(from("ROM.14.24"), None, "moved away");
+        assert_eq!(from("ROM.14.23"), None, "no canonical ref");
+        assert_eq!(
+            from("SIR.11.16").as_deref(),
+            Some("SIR.11.15"),
+            "inside a range"
+        );
+        assert_eq!(from("SIR.11").as_deref(), Some("SIR.11"));
+        assert_eq!(from("ROM.15"), None);
+
+        let chapter = t.chapter("ROM", 14).unwrap();
+        assert_eq!(chapter.canonical, vec![None, Some(r("ROM.16.25"))]);
+        assert_eq!(t.chapter("SIR", 11).unwrap().verses[1].verse_end, Some(16));
+    }
+
+    #[test]
+    fn web_versification() {
+        let web = bundled("eng-web");
+        let r = |key: &str| Ref::parse(key).unwrap();
+        let from = |key: &str| web.from_canonical(&r(key)).unwrap().map(|r| r.key());
+        let to = |key: &str| web.to_canonical(&r(key)).unwrap().map(|r| r.key());
+
+        assert_eq!(from("JHN.3.16").as_deref(), Some("JHN.3.16"));
+        assert_eq!(from("ROM.16.25").as_deref(), Some("ROM.14.24"));
+        assert_eq!(from("MAT.23.13").as_deref(), Some("MAT.23.14"));
+        assert_eq!(from("ACT.8.37"), None, "omitted by WEB");
+        assert_eq!(from("2ES.7.36").as_deref(), Some("2ES.7.106"));
+        assert_eq!(to("2ES.7.50"), None, "fragment the KJV lacks");
+        assert_eq!(from("S3Y.1.45"), None);
+        assert_eq!(from("S3Y.1.56").as_deref(), Some("DAG.3.77"));
+        assert_eq!(from("SUS.1").as_deref(), Some("DAG.13"));
+        assert_eq!(to("DAG.14").as_deref(), Some("BEL.1"));
+        assert_eq!(from("ESG.11.1").as_deref(), Some("ESG.10.14"));
+        assert_eq!(from("SIR.33.31").as_deref(), Some("SIR.33.32"));
+        // The only combined verse with text.
+        assert_eq!(from("4MA.8.29").as_deref(), Some("4MA.8.28"));
+
+        // Every mapping target is a real KJV verse, so no key is a typo.
+        let kjv = kjv();
+        let mut stmt = web
+            .conn
+            .prepare("SELECT canon_book, canon_chapter, canon_verse FROM verse_map WHERE canon_book IS NOT NULL")
+            .unwrap();
+        let targets: Vec<(String, u32, u32)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(targets.len() > 200);
+        for (book, chapter, verse) in targets {
+            assert!(
+                kjv.verse_text(&book, chapter, verse).unwrap().is_some(),
+                "{book} {chapter}:{verse}"
+            );
+        }
     }
 }

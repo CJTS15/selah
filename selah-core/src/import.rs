@@ -9,6 +9,7 @@ use std::path::Path;
 
 use crate::Error;
 use crate::books::{self, Section};
+use crate::versification::{self, Mapping};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Book {
@@ -24,6 +25,8 @@ pub struct Book {
 pub struct Verse {
     pub chapter: u32,
     pub verse: u32,
+    /// Last verse of a combined range such as `\v 15-16`.
+    pub verse_end: Option<u32>,
     /// The verse starts a new paragraph or poetry line.
     pub para: bool,
     pub text: String,
@@ -72,9 +75,10 @@ pub type Meta = Vec<(String, String)>;
 
 const REQUIRED_META: &[&str] = &["id", "name", "language", "direction", "licence"];
 
-/// Reads `meta.txt` and every `*.usfm` file in `dir`. Books keep the order of
-/// the file names, which is the translation's own book order.
-pub fn import_dir(dir: &Path) -> Result<(Meta, Vec<Book>), Error> {
+/// Reads `meta.txt`, every `*.usfm` file and the optional `versification.txt`
+/// in `dir`. Books keep the order of the file names, which is the
+/// translation's own book order.
+pub fn import_dir(dir: &Path) -> Result<(Meta, Vec<Book>, Mapping), Error> {
     let meta = parse_meta(&fs::read_to_string(dir.join("meta.txt"))?)?;
 
     let mut paths = Vec::new();
@@ -97,7 +101,14 @@ pub fn import_dir(dir: &Path) -> Result<(Meta, Vec<Book>), Error> {
         })?;
         books.push(book);
     }
-    Ok((meta, books))
+
+    let mapping = match fs::read_to_string(dir.join("versification.txt")) {
+        Ok(src) => versification::parse_mapping(&src)?,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Mapping::new(),
+        Err(err) => return Err(err.into()),
+    };
+    versification::check_mapping(&books, &mapping)?;
+    Ok((meta, books, mapping))
 }
 
 pub fn parse_meta(src: &str) -> Result<Meta, Error> {
@@ -207,6 +218,10 @@ impl Parser {
             "h" => self.short_name = Some(collapse(rest)),
             "ide" | "toc1" | "mt" | "mt1" | "mt2" | "mt3" | "imt" | "imt1" | "is" | "is1"
             | "ip" | "rem" | "usfm" | "sts" => self.target = Target::Ignore,
+            // Chapter labels (`\cl Psalm`, `\cp 151`) repeat the chapter number.
+            // Speaker labels (`\sp Beloved`, Song of Songs) are editorial and
+            // often fall mid-verse, so they are dropped too.
+            "cl" | "cp" | "sp" => {}
             "c" => {
                 self.end_chapter();
                 self.chapter = parse_number(rest.trim(), "chapter")?;
@@ -219,7 +234,17 @@ impl Parser {
                 }
                 let rest = rest.trim_start();
                 let (number, text) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
-                let verse = parse_number(number, "verse")?;
+                let (verse, verse_end) = match number.split_once('-') {
+                    Some((first, last)) => {
+                        let (first, last) =
+                            (parse_number(first, "verse")?, parse_number(last, "verse")?);
+                        if last <= first {
+                            return Err(format!("unsupported verse range {number:?}"));
+                        }
+                        (first, Some(last))
+                    }
+                    None => (parse_number(number, "verse")?, None),
+                };
                 for heading in &mut self.headings {
                     if heading.before_verse == 0 {
                         heading.before_verse = verse;
@@ -228,10 +253,11 @@ impl Parser {
                 self.verses.push(Verse {
                     chapter: self.chapter,
                     verse,
+                    verse_end,
                     para: std::mem::take(&mut self.pending_para),
                     text: String::new(),
                 });
-                self.last_verse = verse;
+                self.last_verse = verse_end.unwrap_or(verse);
                 self.target = Target::Verse;
                 self.append(text);
             }
@@ -319,6 +345,14 @@ impl Parser {
         for heading in &mut self.headings {
             heading.text = collapse(&heading.text.replace('¶', ""));
         }
+        // A verse holding only a footnote (WEB Rom 16:25) is not text; its
+        // paragraph start moves to the next verse.
+        let mut carry_para = false;
+        self.verses.retain_mut(|verse| {
+            verse.para |= std::mem::take(&mut carry_para);
+            carry_para = verse.text.is_empty() && verse.para;
+            !verse.text.is_empty()
+        });
         self.headings.retain(|heading| !heading.text.is_empty());
 
         Ok(Book {
@@ -373,12 +407,14 @@ mod tests {
                 Verse {
                     chapter: 3,
                     verse: 1,
+                    verse_end: None,
                     para: true,
                     text: "LORD, how are they increased! many are they.".into(),
                 },
                 Verse {
                     chapter: 3,
                     verse: 2,
+                    verse_end: None,
                     para: true,
                     text: "Many there be which say.".into(),
                 },
@@ -437,11 +473,45 @@ mod tests {
             Err(Error::Usfm { .. })
         ));
         assert!(matches!(
-            parse_usfm("\\id GEN\n\\c 1\n\\v 1-2 x"),
+            parse_usfm("\\id GEN\n\\c 1\n\\v 2-1 x"),
             Err(Error::Usfm { line: 3, .. })
         ));
+        assert!(parse_usfm("\\id GEN\n\\c 1\n\\v 1a x").is_err());
         assert!(parse_usfm("\\id GEN\n\\v 1 x").is_err());
         assert!(parse_usfm("\\c 1\n\\v 1 x").is_err());
+    }
+
+    #[test]
+    fn ranges_empty_verses_and_labels() {
+        let src = r"\id SIR
+\c 11
+\cl Chapter
+\cp XI
+\sp Beloved
+\p
+\v 14 Good things and bad.
+\sp Friends
+\q1 Rejoice.
+\p
+\v 15-16 \f + \fr 11:15-16 \ft Omitted by the best authorities. \f*
+\v 17 The gift of the Lord.
+\v 18-19 So they said.
+";
+        let book = parse_usfm(src).unwrap();
+        let verses: Vec<_> = book
+            .verses
+            .iter()
+            .map(|v| (v.verse, v.verse_end, v.para, v.text.as_str()))
+            .collect();
+        assert_eq!(
+            verses,
+            vec![
+                (14, None, true, "Good things and bad. Rejoice."),
+                (17, None, true, "The gift of the Lord."),
+                (18, Some(19), false, "So they said."),
+            ]
+        );
+        assert!(book.headings.is_empty(), "{:?}", book.headings);
     }
 
     #[test]

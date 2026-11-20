@@ -165,7 +165,7 @@ impl SelahWindow {
         }
     }
 
-    fn run_search(&self) {
+    pub(super) fn run_search(&self) {
         let imp = self.imp();
         let generation = imp.search_generation.get() + 1;
         imp.search_generation.set(generation);
@@ -183,7 +183,7 @@ impl SelahWindow {
             Some((books.get(r.book)?.id.clone(), r.chapter?, r.verses?.0))
         });
         let scope = self.scope();
-        let path = translation_path();
+        let path = self.translation_path();
         glib::spawn_future_local(glib::clone!(
             #[weak(rename_to = win)]
             self,

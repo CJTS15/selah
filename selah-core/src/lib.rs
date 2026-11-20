@@ -6,6 +6,7 @@ pub mod import;
 pub mod refs;
 pub mod store;
 pub mod user;
+pub mod versification;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
