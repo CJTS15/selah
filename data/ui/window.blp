@@ -296,6 +296,15 @@ template $SelahWindow: Adw.ApplicationWindow {
                       label: _("Search");
                     }
                   }
+
+                  // Label and menu are set from the installed translations.
+
+                  [end]
+                  MenuButton translation_button {
+                    always-show-arrow: true;
+                    tooltip-text: _("Translation");
+                    visible: false;
+                  }
                 }
 
                 content: Stack reader_stack {

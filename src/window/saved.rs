@@ -1,6 +1,6 @@
 //! The Saved page: highlights and bookmarks, with filters in the sidebar.
 
-use selah_core::user::{Colour, Kind};
+use selah_core::user::{Colour, Kind, Ref};
 
 use super::verse::colour_name;
 use super::*;
@@ -207,7 +207,7 @@ impl SelahWindow {
 
         let generation = imp.saved_generation.get() + 1;
         imp.saved_generation.set(generation);
-        let path = translation_path();
+        let path = self.translation_path();
         let refs: Vec<_> = items.iter().map(|a| a.reference.clone()).collect();
         glib::spawn_future_local(glib::clone!(
             #[weak(rename_to = win)]
@@ -215,10 +215,19 @@ impl SelahWindow {
             async move {
                 let result = gio::spawn_blocking(move || {
                     let translation = Translation::open(&path)?;
+                    // Where each saved reference is in this translation, with its text.
                     refs.iter()
-                        .map(|r| match r.verse {
-                            Some(verse) => translation.verse_text(&r.book, r.chapter, verse),
-                            None => Ok(None),
+                        .map(|r| {
+                            let shown = translation.from_canonical(r)?;
+                            let text = match &shown {
+                                Some(Ref {
+                                    book,
+                                    chapter,
+                                    verse: Some(verse),
+                                }) => translation.verse_text(book, *chapter, *verse)?,
+                                _ => None,
+                            };
+                            Ok::<_, selah_core::Error>((shown, text))
                         })
                         .collect::<Result<Vec<_>, _>>()
                 })
@@ -227,7 +236,7 @@ impl SelahWindow {
                     return;
                 }
                 match result {
-                    Ok(Ok(texts)) => win.render_saved(&items, &texts, bible_order),
+                    Ok(Ok(shown)) => win.render_saved(&items, &shown, bible_order),
                     Ok(Err(err)) => win.show_error(&err.to_string()),
                     Err(panic) => std::panic::resume_unwind(panic),
                 }
@@ -235,7 +244,13 @@ impl SelahWindow {
         ));
     }
 
-    fn render_saved(&self, items: &[Annotation], texts: &[Option<String>], bible_order: bool) {
+    /// `shown` holds where each item is in this translation, and its verse text.
+    fn render_saved(
+        &self,
+        items: &[Annotation],
+        shown: &[(Option<Ref>, Option<String>)],
+        bible_order: bool,
+    ) {
         let imp = self.imp();
         let page = &imp.saved_list;
         while let Some(child) = page.first_child() {
@@ -250,7 +265,7 @@ impl SelahWindow {
         let mut current_group: Option<bool> = None;
         let mut list: Option<gtk::ListBox> = None;
 
-        for (item, text) in items.iter().zip(texts) {
+        for (item, (native, text)) in items.iter().zip(shown) {
             // Recent order groups by day: Today, then Earlier.
             let is_today = glib::DateTime::from_unix_local(item.modified)
                 .ok()
@@ -280,12 +295,10 @@ impl SelahWindow {
                 current_group = Some(is_today);
             }
 
-            let r = &item.reference;
+            // Shown as this translation numbers it; the stored reference if absent.
+            let present = native.is_some();
+            let r = native.as_ref().unwrap_or(&item.reference);
             let book = books.iter().find(|b| b.id == r.book);
-            let present = match r.verse {
-                Some(_) => text.is_some(),
-                None => book.is_some_and(|b| b.chapters.contains(&r.chapter)),
-            };
             let name = book.map_or(r.book.as_str(), |b| b.name.as_str());
 
             let content = gtk::Box::builder()

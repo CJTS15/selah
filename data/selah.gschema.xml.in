@@ -13,6 +13,11 @@
       <default>false</default>
       <summary>Window maximized state</summary>
     </key>
+    <key name="translation" type="s">
+      <default>"eng-kjv"</default>
+      <summary>Translation to open</summary>
+      <description>The translation read last, opened again at startup. Reading positions (last-book, last-chapter) use its numbering.</description>
+    </key>
     <key name="last-book" type="s">
       <default>"GEN"</default>
       <summary>Book of the last chapter read</summary>

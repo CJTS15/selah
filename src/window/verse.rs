@@ -1,5 +1,7 @@
 //! Verse actions in the reader: highlights, bookmarks and copying.
 
+use std::collections::HashMap;
+
 use selah_core::user::{Colour, Ref};
 
 use super::*;
@@ -267,38 +269,74 @@ impl SelahWindow {
         (a.offset() == start && b.offset() == end).then_some(verse)
     }
 
-    fn current_ref(&self, verse: Option<u32>) -> Option<Ref> {
+    /// The canonical reference that user data is stored by, for the open
+    /// chapter (through its first verse) or one of its verses. `None` while
+    /// a chapter loads, or for a verse the canonical scheme lacks.
+    fn canonical_ref(&self, verse: Option<u32>) -> Option<Ref> {
+        let content = self.imp().chapter_content.borrow();
+        let content = content.as_ref()?;
+        match verse {
+            Some(verse) => {
+                let index = content.verses.iter().position(|v| v.verse == verse)?;
+                content.canonical.get(index)?.clone()
+            }
+            None => content
+                .canonical
+                .first()?
+                .clone()
+                .map(|r| Ref { verse: None, ..r }),
+        }
+    }
+
+    /// "John 3:16" for a verse of the open chapter, as this translation numbers it.
+    fn verse_title(&self, verse: u32) -> Option<String> {
         let imp = self.imp();
         let (book, chapter) = imp.current.get()?;
-        Some(Ref {
-            book: imp.books.borrow().get(book)?.id.clone(),
+        let name = imp.books.borrow().get(book)?.name.clone();
+        let last = imp
+            .chapter_content
+            .borrow()
+            .as_ref()?
+            .verses
+            .iter()
+            .find(|v| v.verse == verse)?
+            .verse_end;
+        Some(reference_title(
+            &name,
             chapter,
-            verse,
-        })
+            Some((verse, last.unwrap_or(verse))),
+        ))
+    }
+
+    fn set_action_enabled(&self, name: &str, enabled: bool) {
+        if let Some(action) = self.lookup_action(name).and_downcast::<gio::SimpleAction>() {
+            action.set_enabled(enabled);
+        }
     }
 
     fn show_verse_actions(&self) {
         let imp = self.imp();
-        let (Some(verse), Some(reference)) =
-            (self.active_verse(), self.current_ref(self.active_verse()))
-        else {
+        let Some(verse) = self.active_verse() else {
             return;
         };
-        let colour = self.with_db(|db| db.highlight_of(&reference)).flatten();
-        let bookmarked = self
-            .with_db(|db| db.is_bookmarked(&reference))
+        let Some(title) = self.verse_title(verse) else {
+            return;
+        };
+        // Verses without a canonical reference can be copied but not saved.
+        let reference = self.canonical_ref(Some(verse));
+        for action in ["highlight", "bookmark-verse", "remove-highlight"] {
+            self.set_action_enabled(action, reference.is_some());
+        }
+        let colour = reference
+            .as_ref()
+            .and_then(|r| self.with_db(|db| db.highlight_of(r)).flatten());
+        let bookmarked = reference
+            .as_ref()
+            .and_then(|r| self.with_db(|db| db.is_bookmarked(r)))
             .unwrap_or(false);
         if let Some(action) = self.lookup_action("highlight") {
             action.change_state(&colour.map_or("", Colour::as_str).to_variant());
         }
-        let Some(book_name) = imp
-            .current
-            .get()
-            .and_then(|(book, _)| imp.books.borrow().get(book).map(|b| b.name.clone()))
-        else {
-            return;
-        };
-        let title = reference_title(&book_name, reference.chapter, Some((verse, verse)));
 
         if imp.split_view.is_collapsed() {
             self.show_verse_sheet(&title, colour.is_some(), bookmarked);
@@ -547,8 +585,8 @@ impl SelahWindow {
 
     fn highlight_active(&self, colour: Colour) {
         if let Some(reference) = self
-            .current_ref(self.active_verse())
-            .filter(|r| r.verse.is_some())
+            .active_verse()
+            .and_then(|v| self.canonical_ref(Some(v)))
         {
             self.with_db(|db| db.set_highlight(&reference, colour));
             self.after_annotation_change();
@@ -558,8 +596,8 @@ impl SelahWindow {
 
     fn remove_active_highlight(&self) {
         if let Some(reference) = self
-            .current_ref(self.active_verse())
-            .filter(|r| r.verse.is_some())
+            .active_verse()
+            .and_then(|v| self.canonical_ref(Some(v)))
         {
             self.with_db(|db| db.remove_highlight(&reference));
             self.after_annotation_change();
@@ -568,10 +606,8 @@ impl SelahWindow {
     }
 
     fn toggle_verse_bookmark(&self) {
-        if let Some(reference) = self
-            .current_ref(self.active_verse())
-            .filter(|r| r.verse.is_some())
-        {
+        let verse = self.active_verse();
+        if let Some(reference) = verse.and_then(|v| self.canonical_ref(Some(v))) {
             let added = self.with_db(|db| {
                 let added = !db.is_bookmarked(&reference)?;
                 db.set_bookmark(&reference, added)?;
@@ -579,26 +615,18 @@ impl SelahWindow {
             });
             self.after_annotation_change();
             if let Some(added) = added {
-                self.bookmark_toast(&reference, added);
+                self.bookmark_toast(verse.and_then(|v| self.verse_title(v)), added);
             }
         }
         self.close_verse_actions();
     }
 
-    /// Confirms a bookmark change, naming the verse or chapter.
-    fn bookmark_toast(&self, reference: &Ref, added: bool) {
-        if !added {
+    /// Confirms a bookmark change, naming the verse or chapter as shown.
+    fn bookmark_toast(&self, title: Option<String>, added: bool) {
+        let Some(title) = title.filter(|_| added) else {
             self.toast(&gettext("Removed Bookmark"));
             return;
-        }
-        let imp = self.imp();
-        let name = imp
-            .books
-            .borrow()
-            .iter()
-            .find(|b| b.id == reference.book)
-            .map_or_else(|| reference.book.clone(), |b| b.name.clone());
-        let title = reference_title(&name, reference.chapter, reference.verse.map(|v| (v, v)));
+        };
         // Translators: {reference} is a verse or chapter, such as "John 3:16".
         self.toast(&gettext("Bookmarked {reference}").replace("{reference}", &title));
     }
@@ -614,19 +642,13 @@ impl SelahWindow {
                 .find(|v| v.verse == verse)
                 .map(|v| v.text.clone())
         });
-        let (Some(text), Some((book, chapter))) = (text, imp.current.get()) else {
-            return;
-        };
-        let Some(book_name) = imp.books.borrow().get(book).map(|b| b.name.clone()) else {
+        let (Some(text), Some(title)) = (text, self.verse_title(verse)) else {
             return;
         };
         // Translators: copied verse; keep the placeholders, adjust the quotation marks.
         let copied = gettext("“{text}” ({reference} {translation})")
             .replace("{text}", &text)
-            .replace(
-                "{reference}",
-                &reference_title(&book_name, chapter, Some((verse, verse))),
-            )
+            .replace("{reference}", &title)
             .replace("{translation}", &imp.translation_abbrev.borrow());
         self.clipboard().set_text(&copied);
         self.toast(&gettext("Copied to clipboard"));
@@ -659,45 +681,72 @@ impl SelahWindow {
         }
         buffer.remove_tag_by_name("bookmarked", &start, &end);
         buffer.remove_tag_by_name("bookmarked-number", &start, &end);
-        let Some(Ref { book, chapter, .. }) = self.current_ref(None) else {
+        let content = imp.chapter_content.borrow();
+        let Some(content) = content.as_ref() else {
             return;
         };
-        for verse in self
-            .with_db(|db| db.verse_bookmarks(&book, chapter))
-            .unwrap_or_default()
-        {
-            if let Some((start, end)) = self.verse_range(verse) {
-                // The range starts with the verse number's digits.
-                let digits = i32::try_from(verse.to_string().len()).unwrap_or(0);
-                buffer.apply_tag_by_name(
-                    "bookmarked",
-                    &buffer.iter_at_offset(start),
-                    &buffer.iter_at_offset(end),
-                );
-                buffer.apply_tag_by_name(
-                    "bookmarked-number",
-                    &buffer.iter_at_offset(start),
-                    &buffer.iter_at_offset(start + digits),
-                );
+        // Canonical (book, chapter, verse) to the verse shown, with its number label.
+        let mut shown: HashMap<(&str, u32, u32), (u32, String)> = HashMap::new();
+        let mut chapters: Vec<(&str, u32)> = Vec::new();
+        for (verse, canonical) in content.verses.iter().zip(&content.canonical) {
+            let Some(Ref {
+                book,
+                chapter,
+                verse: Some(number),
+            }) = canonical
+            else {
+                continue;
+            };
+            shown.insert((book, *chapter, *number), (verse.verse, verse_label(verse)));
+            if !chapters.contains(&(book, *chapter)) {
+                chapters.push((book, *chapter));
             }
         }
-        for (verse, colour) in self
-            .with_db(|db| db.highlights(&book, chapter))
-            .unwrap_or_default()
-        {
-            if let Some((start, end)) = self.verse_range(verse) {
-                buffer.apply_tag_by_name(
-                    &format!("hl-{}", colour.as_str()),
-                    &buffer.iter_at_offset(start),
-                    &buffer.iter_at_offset(end),
-                );
+        for (book, chapter) in chapters {
+            for number in self
+                .with_db(|db| db.verse_bookmarks(book, chapter))
+                .unwrap_or_default()
+            {
+                let Some((verse, label)) = shown.get(&(book, chapter, number)) else {
+                    continue;
+                };
+                if let Some((start, end)) = self.verse_range(*verse) {
+                    // The range starts with the verse number.
+                    let digits = i32::try_from(label.chars().count()).unwrap_or(0);
+                    buffer.apply_tag_by_name(
+                        "bookmarked",
+                        &buffer.iter_at_offset(start),
+                        &buffer.iter_at_offset(end),
+                    );
+                    buffer.apply_tag_by_name(
+                        "bookmarked-number",
+                        &buffer.iter_at_offset(start),
+                        &buffer.iter_at_offset(start + digits),
+                    );
+                }
+            }
+            for (number, colour) in self
+                .with_db(|db| db.highlights(book, chapter))
+                .unwrap_or_default()
+            {
+                let Some((verse, _)) = shown.get(&(book, chapter, number)) else {
+                    continue;
+                };
+                if let Some((start, end)) = self.verse_range(*verse) {
+                    buffer.apply_tag_by_name(
+                        &format!("hl-{}", colour.as_str()),
+                        &buffer.iter_at_offset(start),
+                        &buffer.iter_at_offset(end),
+                    );
+                }
             }
         }
     }
 
     pub(super) fn update_chapter_bookmark(&self) {
-        let bookmarked = self
-            .current_ref(None)
+        let reference = self.canonical_ref(None);
+        self.set_action_enabled("bookmark-chapter", reference.is_some());
+        let bookmarked = reference
             .and_then(|reference| self.with_db(|db| db.is_bookmarked(&reference)))
             .unwrap_or(false);
         if let Some(action) = self.lookup_action("bookmark-chapter") {
@@ -706,7 +755,7 @@ impl SelahWindow {
     }
 
     fn set_chapter_bookmark(&self, bookmarked: bool) -> bool {
-        let Some(reference) = self.current_ref(None) else {
+        let Some(reference) = self.canonical_ref(None) else {
             return false;
         };
         let done = self
@@ -714,7 +763,12 @@ impl SelahWindow {
             .is_some();
         if done {
             self.refresh_saved();
-            self.bookmark_toast(&reference, bookmarked);
+            let imp = self.imp();
+            let title = imp.current.get().and_then(|(book, chapter)| {
+                let name = imp.books.borrow().get(book)?.name.clone();
+                Some(reference_title(&name, chapter, None))
+            });
+            self.bookmark_toast(title, bookmarked);
         }
         done
     }
