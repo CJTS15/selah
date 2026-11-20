@@ -285,9 +285,7 @@ template $SelahWindow: Adw.ApplicationWindow {
                     }
                   }
 
-                  title-widget: Adw.WindowTitle reader_title {};
-
-                  [end]
+                  [start]
                   ToggleButton {
                     icon-name: "user-bookmarks-symbolic";
                     tooltip-text: _("Bookmark Chapter");
@@ -297,6 +295,8 @@ template $SelahWindow: Adw.ApplicationWindow {
                       label: _("Bookmark Chapter");
                     }
                   }
+
+                  title-widget: Adw.WindowTitle reader_title {};
 
                   [end]
                   Button {
