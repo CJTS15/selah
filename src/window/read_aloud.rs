@@ -195,6 +195,9 @@ impl SelahWindow {
             state.paused = false;
         }
         self.imp().read_bar.set_revealed(true);
+        // Started from the menu, focus would stay on the menu button, which
+        // takes Space; on the play button Space pauses either way.
+        self.imp().read_pause.grab_focus();
         self.read_verse(first);
     }
 
@@ -217,6 +220,10 @@ impl SelahWindow {
         let buffer = imp.text_view.buffer();
         let (start, end) = buffer.bounds();
         buffer.remove_tag_by_name("reading", &start, &end);
+        // Do not leave focus on the bar as it hides.
+        if gtk::prelude::GtkWindowExt::focus(self).is_some_and(|w| w.is_ancestor(&*imp.read_bar)) {
+            imp.text_view.grab_focus();
+        }
         imp.read_bar.set_revealed(false);
     }
 
