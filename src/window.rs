@@ -527,6 +527,11 @@ impl SelahWindow {
             body.set_family(Some(family));
             body.set_line_height(line_height);
         }
+        // The verse of the day reads like the reader: same face and spacing.
+        let attrs = pango::AttrList::new();
+        attrs.insert(pango::AttrString::new_family(family));
+        attrs.insert(pango::AttrFloat::new_line_height(f64::from(line_height)));
+        self.imp().daily_text.set_attributes(Some(&attrs));
     }
 
     fn zoom(&self) -> f64 {
