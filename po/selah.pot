@@ -1,0 +1,882 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the selah package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: selah\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-20 17:13+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: data/selah.desktop.in.in:2 data/selah.metainfo.xml.in.in:6
+#: data/ui/window.blp:25 data/ui/window.blp:66
+msgid "Selah"
+msgstr ""
+
+#: data/selah.desktop.in.in:3 data/selah.metainfo.xml.in.in:7
+msgid "Read the Bible offline"
+msgstr ""
+
+#. Translators: Search terms to find this application. Do NOT translate or localize the semicolons. The list MUST also end with a semicolon.
+#: data/selah.desktop.in.in:5
+msgid "Bible;Scripture;Verse;"
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:9
+msgid ""
+"Selah is a local-first Bible reader. It works offline from the first launch "
+"and keeps your notes on your device."
+msgstr ""
+
+#: data/ui/note-dialog.blp:16 src/window/translations.rs:413
+msgid "_Cancel"
+msgstr ""
+
+#: data/ui/note-dialog.blp:22
+msgid "_Save"
+msgstr ""
+
+#: data/ui/note-dialog.blp:40 src/window.rs:1294 src/window/verse.rs:594
+msgid "Note"
+msgstr ""
+
+#: data/ui/note-dialog.blp:48
+msgid "_Delete Note"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:9
+msgid "Text"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:26
+msgid "Preview"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:32
+msgid "Reading _Font"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:37 data/ui/preferences-dialog.blp:49
+msgid "Text Size"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:38
+msgid "Also Ctrl+plus and Ctrl+minus"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:54 data/ui/preferences-dialog.blp:58
+msgid "Smaller"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:72 data/ui/preferences-dialog.blp:76
+msgid "Larger"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:83
+msgid "_Line Spacing"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:89
+msgid "Layout"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:92
+msgid "_Verse Layout"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:97
+msgid "Verse _Numbers"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:102
+msgid "Verse of the _Day"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:103
+msgid "At the top of the sidebar"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:109 data/ui/translations-dialog.blp:5
+msgid "Translations"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:112
+msgid "_Default Translation"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:113
+msgid "Opens at start-up"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:118
+msgid "Show _Deuterocanon"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:119
+msgid "As its own section, in translations that include it"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:125
+msgid "Read Aloud"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:128
+msgid "_Speed"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:134 data/ui/shortcuts-dialog.blp:59
+#: data/ui/window.blp:363 data/ui/window.blp:367
+msgid "Search"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:137
+msgid "Match _Whole Words"
+msgstr ""
+
+#: data/ui/preferences-dialog.blp:138
+msgid "Otherwise the last word also finds longer words"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:6
+msgid "Reading"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:9 data/ui/window.blp:328 data/ui/window.blp:332
+msgid "Previous Chapter"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:14 data/ui/window.blp:339
+#: data/ui/window.blp:343
+msgid "Next Chapter"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:19
+msgid "Verse Actions"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:24 src/window/verse.rs:449
+msgid "Bookmark Verse"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:29
+msgid "Add or Edit Note"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:34
+msgid "Start or Stop Reading Aloud"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:39
+msgid "Pause or Resume Reading"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:44
+msgid "Previous Verse While Reading"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:49
+msgid "Next Verse While Reading"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:54
+msgid "Caret Browsing"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:64 data/ui/window.blp:164
+#: data/ui/window.blp:168
+msgid "Zoom In"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:69 data/ui/window.blp:141
+#: data/ui/window.blp:145
+msgid "Zoom Out"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:74
+msgid "Reset Zoom"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:80
+msgid "General"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:83
+msgid "Preferences"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:88
+msgid "Keyboard Shortcuts"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:93
+msgid "Close Window"
+msgstr ""
+
+#: data/ui/shortcuts-dialog.blp:98
+msgid "Quit"
+msgstr ""
+
+#: data/ui/translations-dialog.blp:15
+msgid "_Import…"
+msgstr ""
+
+#: data/ui/translations-dialog.blp:17
+msgid "Import a Translation Package"
+msgstr ""
+
+#: data/ui/translations-dialog.blp:24
+msgid "Installed"
+msgstr ""
+
+#: data/ui/translations-dialog.blp:25
+msgid "Available offline. The default opens at start-up."
+msgstr ""
+
+#: data/ui/translations-dialog.blp:39
+msgid "Available"
+msgstr ""
+
+#: data/ui/translations-dialog.blp:40
+msgid "Openly licensed texts from the Selah catalogue"
+msgstr ""
+
+#: data/ui/translations-dialog.blp:47
+msgid "Language"
+msgstr ""
+
+#: data/ui/translations-dialog.blp:52 data/ui/translations-dialog.blp:61
+msgid "Refresh Catalogue"
+msgstr ""
+
+#: data/ui/window.blp:16
+msgid "_Read Aloud"
+msgstr ""
+
+#: data/ui/window.blp:17
+msgid "_Translations…"
+msgstr ""
+
+#: data/ui/window.blp:18
+msgid "_Preferences"
+msgstr ""
+
+#: data/ui/window.blp:19
+msgid "_Keyboard Shortcuts"
+msgstr ""
+
+#: data/ui/window.blp:20
+msgid "_About Selah"
+msgstr ""
+
+#: data/ui/window.blp:51 data/ui/window.blp:241 data/ui/window.blp:271
+msgid "Books"
+msgstr ""
+
+#: data/ui/window.blp:61 data/ui/window.blp:376
+msgid "Translation"
+msgstr ""
+
+#: data/ui/window.blp:73
+msgid "Main Menu"
+msgstr ""
+
+#: data/ui/window.blp:94 data/ui/window.blp:97
+msgid "Follow System Style"
+msgstr ""
+
+#: data/ui/window.blp:107 data/ui/window.blp:110
+msgid "Light Style"
+msgstr ""
+
+#: data/ui/window.blp:120 data/ui/window.blp:123
+msgid "Dark Style"
+msgstr ""
+
+#: data/ui/window.blp:200
+msgid "Verse of the Day"
+msgstr ""
+
+#: data/ui/window.blp:246 data/ui/window.blp:289
+msgid "Saved"
+msgstr ""
+
+#: data/ui/window.blp:252
+msgid "Filter books"
+msgstr ""
+
+#: data/ui/window.blp:299
+msgid "Reader"
+msgstr ""
+
+#: data/ui/window.blp:317 data/ui/window.blp:321 data/ui/window.blp:534
+#: data/ui/window.blp:538 data/ui/window.blp:631 data/ui/window.blp:635
+msgid "Show Books"
+msgstr ""
+
+#: data/ui/window.blp:350 data/ui/window.blp:354
+msgid "Bookmark Chapter"
+msgstr ""
+
+#: data/ui/window.blp:413
+msgid "Could Not Open the Bible"
+msgstr ""
+
+#: data/ui/window.blp:416
+msgid "_Manage Translations"
+msgstr ""
+
+#: data/ui/window.blp:454 data/ui/window.blp:464
+msgid "Previous Verse"
+msgstr ""
+
+#: data/ui/window.blp:470 data/ui/window.blp:481 src/window/read_aloud.rs:424
+msgid "Pause"
+msgstr ""
+
+#: data/ui/window.blp:487 data/ui/window.blp:497
+msgid "Next Verse"
+msgstr ""
+
+#: data/ui/window.blp:505 data/ui/window.blp:515
+msgid "Stop Reading"
+msgstr ""
+
+#: data/ui/window.blp:547
+msgid "Search or go to a reference"
+msgstr ""
+
+#: data/ui/window.blp:567
+msgid "Whole Bible"
+msgstr ""
+
+#: data/ui/window.blp:572 src/window.rs:414 src/window/search.rs:35
+msgid "Old Testament"
+msgstr ""
+
+#: data/ui/window.blp:577 src/window.rs:415 src/window/search.rs:36
+msgid "New Testament"
+msgstr ""
+
+#: data/ui/window.blp:613
+msgid "No Results"
+msgstr ""
+
+#: data/ui/window.blp:614
+msgid "Try other words or check the spelling"
+msgstr ""
+
+#: data/ui/window.blp:643 data/ui/window.blp:646
+msgid "Sort Order"
+msgstr ""
+
+#: data/ui/window.blp:678
+msgid "Nothing Saved Yet"
+msgstr ""
+
+#: data/ui/window.blp:679
+msgid "Tap a verse to highlight or bookmark it"
+msgstr ""
+
+#: src/window.rs:416 src/window/search.rs:37
+msgid "Deuterocanon"
+msgstr ""
+
+#: src/window.rs:435
+msgid "In this translation"
+msgstr ""
+
+#. Translators: accessible label of a book in the sidebar, e.g. "John, 21 chapters".
+#: src/window.rs:688
+#, rust-format
+msgid "{book}, {n} chapter"
+msgid_plural "{book}, {n} chapters"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Translators: accessible label of a chapter button; {} is the chapter number.
+#: src/window.rs:733
+#, rust-format
+msgid "Chapter {}"
+msgstr ""
+
+#: src/window.rs:898
+msgid "No translations are installed"
+msgstr ""
+
+#. Translators: {name} is a translation name.
+#: src/window.rs:986
+#, rust-format
+msgid "Could not open {name}"
+msgstr ""
+
+#. Translators: accessible label of the translation picker; {name} is a translation.
+#: src/window.rs:1010
+#, rust-format
+msgid "Translation: {name}"
+msgstr ""
+
+#. Translators: accessible label of the note mark; {reference} is a verse.
+#. Translators: title of the note dialog; {reference} is a verse, such as "John 3:16".
+#: src/window.rs:1302 src/window/notes.rs:88
+#, rust-format
+msgid "Note on {reference}"
+msgstr ""
+
+#: src/window/catalog.rs:181
+msgid "All Languages"
+msgstr ""
+
+#: src/window/catalog.rs:205
+msgid "Could not load the catalogue. Check your connection, then refresh."
+msgstr ""
+
+#: src/window/catalog.rs:208
+msgid "Every translation in the catalogue is installed."
+msgstr ""
+
+#: src/window/catalog.rs:371 src/window/catalog.rs:381
+msgid "size did not match"
+msgstr ""
+
+#. Translators: download progress, e.g. "Downloading 3.2 MB of 5.0 MB".
+#: src/window/catalog.rs:423
+#, rust-format
+msgid "Downloading {received} of {total}"
+msgstr ""
+
+#: src/window/catalog.rs:427 src/window/catalog.rs:433
+msgid "Cancel Download"
+msgstr ""
+
+#: src/window/catalog.rs:431
+msgid "Installing…"
+msgstr ""
+
+#. Translators: {reason} explains the failure, e.g. "checksum did not match".
+#: src/window/catalog.rs:438
+#, rust-format
+msgid "Download failed: {reason}"
+msgstr ""
+
+#: src/window/catalog.rs:440
+msgid "Retry"
+msgstr ""
+
+#: src/window/catalog.rs:455
+msgid "Update"
+msgstr ""
+
+#: src/window/catalog.rs:457
+msgid "Download"
+msgstr ""
+
+#. Translators: accessible label of a catalogue button, e.g. "Download Reina-Valera 1909".
+#: src/window/catalog.rs:466
+#, rust-format
+msgid "{action} {name}"
+msgstr ""
+
+#: src/window/catalog.rs:486 src/window/catalog.rs:524
+#: src/window/catalog.rs:531
+msgid "checksum did not match"
+msgstr ""
+
+#. Translators: accessible label of the verse of the day card.
+#: src/window/daily.rs:81
+#, rust-format
+msgid "Verse of the Day, {reference}: {text}"
+msgstr ""
+
+#: src/window/notes.rs:158
+msgid "Note deleted"
+msgstr ""
+
+#: src/window/notes.rs:159 src/window/saved.rs:503
+msgid "Undo"
+msgstr ""
+
+#: src/window/preferences.rs:130
+msgid "Serif"
+msgstr ""
+
+#: src/window/preferences.rs:130
+msgid "Sans Serif"
+msgstr ""
+
+#: src/window/preferences.rs:138
+msgid "Comfortable"
+msgstr ""
+
+#: src/window/preferences.rs:139
+msgid "Compact"
+msgstr ""
+
+#: src/window/preferences.rs:140
+msgid "Spacious"
+msgstr ""
+
+#: src/window/preferences.rs:148
+msgid "Paragraphs"
+msgstr ""
+
+#: src/window/preferences.rs:148
+msgid "One Verse per Line"
+msgstr ""
+
+#: src/window/preferences.rs:155
+msgid "Normal"
+msgstr ""
+
+#: src/window/preferences.rs:155
+msgid "Slower"
+msgstr ""
+
+#: src/window/preferences.rs:155
+msgid "Faster"
+msgstr ""
+
+#. Translators: {language} is a language name such as "Tagalog".
+#: src/window/read_aloud.rs:151
+#, rust-format
+msgid "Read aloud is not available in {language}"
+msgstr ""
+
+#: src/window/read_aloud.rs:303
+msgid "Could not read this verse aloud"
+msgstr ""
+
+#: src/window/read_aloud.rs:339
+msgid "Could not play the audio"
+msgstr ""
+
+#: src/window/read_aloud.rs:422
+msgid "Resume"
+msgstr ""
+
+#: src/window/saved.rs:59 src/window/search.rs:413
+msgid "Recent"
+msgstr ""
+
+#: src/window/saved.rs:60
+msgid "Bible Order"
+msgstr ""
+
+#: src/window/saved.rs:75
+msgid "Highlights"
+msgstr ""
+
+#: src/window/saved.rs:139
+msgid "All"
+msgstr ""
+
+#: src/window/saved.rs:144 src/window/saved.rs:200
+msgid "Bookmarks"
+msgstr ""
+
+#: src/window/saved.rs:149 src/window/saved.rs:201
+msgid "Notes"
+msgstr ""
+
+#. Translators: accessible label of a Saved filter, e.g. "Yellow, 3".
+#: src/window/saved.rs:174
+#, rust-format
+msgid "{name}, {count}"
+msgstr ""
+
+#: src/window/saved.rs:199
+msgid "All Saved"
+msgstr ""
+
+#: src/window/saved.rs:204
+#, rust-format
+msgid "{colour} Highlights"
+msgstr ""
+
+#: src/window/saved.rs:210
+#, rust-format
+msgid "Shown in {translation}"
+msgstr ""
+
+#: src/window/saved.rs:326
+msgid "Today"
+msgstr ""
+
+#: src/window/saved.rs:328
+msgid "Earlier"
+msgstr ""
+
+#: src/window/saved.rs:400
+msgid "Hidden: Show Deuterocanon is off"
+msgstr ""
+
+#: src/window/saved.rs:412
+msgid "Chapter bookmark"
+msgstr ""
+
+#: src/window/saved.rs:419
+#, rust-format
+msgid "Not in {translation}"
+msgstr ""
+
+#: src/window/saved.rs:424
+#, rust-format
+msgid "Open in {translation}"
+msgstr ""
+
+#: src/window/saved.rs:439 src/window/translations.rs:205
+#: src/window/verse.rs:601
+msgid "Remove"
+msgstr ""
+
+#: src/window/saved.rs:449 src/window/saved.rs:452
+msgid "More Options"
+msgstr ""
+
+#: src/window/saved.rs:502
+msgid "Removed"
+msgstr ""
+
+#: src/window/search.rs:258
+msgid "Go to"
+msgstr ""
+
+#: src/window/search.rs:276
+msgid "Whole chapter"
+msgstr ""
+
+#. Translators: number of search results in a section, e.g. "12 verses".
+#: src/window/search.rs:296
+#, rust-format
+msgid "{n} verse"
+msgid_plural "{n} verses"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Translators: {shown} and {total} are numbers of verses.
+#: src/window/search.rs:352
+#, rust-format
+msgid "Showing the first {shown} of {total} verses"
+msgstr ""
+
+#. Translators: the Enter key, shown next to the default search result.
+#: src/window/search.rs:398
+msgid "Enter"
+msgstr ""
+
+#: src/window/search.rs:415
+msgid "Clear"
+msgstr ""
+
+#. Translators: {translation} is a Bible translation name.
+#: src/window/search.rs:471
+#, rust-format
+msgid ""
+"Type a reference such as “Gen 1:1” or “Ps 23”, or any words to search the "
+"{translation}."
+msgstr ""
+
+#: src/window/translations.rs:47
+msgid "The file is not a Selah translation package, or it is damaged."
+msgstr ""
+
+#: src/window/translations.rs:49
+msgid "The file is too large to be a translation."
+msgstr ""
+
+#: src/window/translations.rs:52
+#, rust-format
+msgid "{name} is built in and cannot be replaced."
+msgstr ""
+
+#. Translators: {detail} is a technical description of the problem.
+#: src/window/translations.rs:55
+#, rust-format
+msgid "The translation in this file is not valid: {detail}"
+msgstr ""
+
+#: src/window/translations.rs:59
+#, rust-format
+msgid "The translation could not be saved: {detail}"
+msgstr ""
+
+#: src/window/translations.rs:170
+msgid "Includes Deuterocanon"
+msgstr ""
+
+#: src/window/translations.rs:173
+msgid "Built in"
+msgstr ""
+
+#. Translators: {name} is a translation name.
+#: src/window/translations.rs:202
+#, rust-format
+msgid "Remove {name}"
+msgstr ""
+
+#: src/window/translations.rs:312
+msgid "Selah Translations"
+msgstr ""
+
+#: src/window/translations.rs:318
+msgid "Import Translation"
+msgstr ""
+
+#. Translators: {name} is a translation name.
+#: src/window/translations.rs:368
+#, rust-format
+msgid "Updated {name}"
+msgstr ""
+
+#. Translators: {name} is a translation name.
+#: src/window/translations.rs:371
+#, rust-format
+msgid "{name} installed"
+msgstr ""
+
+#: src/window/translations.rs:377
+msgid "Open"
+msgstr ""
+
+#: src/window/translations.rs:388
+msgid "Could Not Import Translation"
+msgstr ""
+
+#: src/window/translations.rs:391
+msgid "_Close"
+msgstr ""
+
+#. Translators: {name} is a translation name.
+#: src/window/translations.rs:407
+#, rust-format
+msgid "Remove {name}?"
+msgstr ""
+
+#: src/window/translations.rs:410
+msgid "Highlights and bookmarks are kept."
+msgstr ""
+
+#: src/window/translations.rs:414
+msgid "_Remove"
+msgstr ""
+
+#. Translators: {name} is a translation name.
+#: src/window/translations.rs:441
+#, rust-format
+msgid "Removed {name}"
+msgstr ""
+
+#. Translators: {name} is a translation name.
+#: src/window/translations.rs:445
+#, rust-format
+msgid "Could not remove {name}"
+msgstr ""
+
+#: src/window/verse.rs:29
+msgid "Yellow"
+msgstr ""
+
+#: src/window/verse.rs:30
+msgid "Green"
+msgstr ""
+
+#: src/window/verse.rs:31
+msgid "Blue"
+msgstr ""
+
+#: src/window/verse.rs:32
+msgid "Pink"
+msgstr ""
+
+#: src/window/verse.rs:33
+msgid "Purple"
+msgstr ""
+
+#: src/window/verse.rs:47
+msgid "Saved verses are unavailable"
+msgstr ""
+
+#: src/window/verse.rs:51
+msgid "Saved Verses Unavailable"
+msgstr ""
+
+#: src/window/verse.rs:53
+msgid "Highlights, bookmarks and notes could not be opened"
+msgstr ""
+
+#: src/window/verse.rs:69
+msgid "Could not save the change"
+msgstr ""
+
+#: src/window/verse.rs:447
+msgid "Remove Bookmark"
+msgstr ""
+
+#: src/window/verse.rs:458
+msgid "Copy with Reference"
+msgstr ""
+
+#: src/window/verse.rs:463
+msgid "Edit Note…"
+msgstr ""
+
+#: src/window/verse.rs:465
+msgid "Add Note…"
+msgstr ""
+
+#: src/window/verse.rs:473
+msgid "Read from Here"
+msgstr ""
+
+#: src/window/verse.rs:479
+msgid "Remove Highlight"
+msgstr ""
+
+#: src/window/verse.rs:557 src/window/verse.rs:560
+msgid "Close"
+msgstr ""
+
+#: src/window/verse.rs:572
+msgid "Unbookmark"
+msgstr ""
+
+#: src/window/verse.rs:574
+msgid "Bookmark"
+msgstr ""
+
+#: src/window/verse.rs:585
+msgid "Copy"
+msgstr ""
+
+#: src/window/verse.rs:592
+msgid "Edit Note"
+msgstr ""
+
+#: src/window/verse.rs:686
+msgid "Removed Bookmark"
+msgstr ""
+
+#. Translators: {reference} is a verse or chapter, such as "John 3:16".
+#: src/window/verse.rs:690
+#, rust-format
+msgid "Bookmarked {reference}"
+msgstr ""
+
+#. Translators: copied verse; keep the placeholders, adjust the quotation marks.
+#: src/window/verse.rs:708
+#, rust-format
+msgid "“{text}” ({reference} {translation})"
+msgstr ""
+
+#: src/window/verse.rs:713
+msgid "Copied to clipboard"
+msgstr ""

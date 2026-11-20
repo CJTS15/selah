@@ -292,6 +292,7 @@ impl SelahWindow {
 
         for &(section, count) in &results.counts {
             let count_text = ngettext(
+                // Translators: number of search results in a section, e.g. "12 verses".
                 "{n} verse",
                 "{n} verses",
                 u32::try_from(count).unwrap_or(u32::MAX),
