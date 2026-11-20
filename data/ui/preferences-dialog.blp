@@ -122,6 +122,15 @@ Adw.PreferencesDialog dialog {
     }
 
     Adw.PreferencesGroup {
+      title: _("Read Aloud");
+
+      Adw.ComboRow read_speed_row {
+        title: _("_Speed");
+        use-underline: true;
+      }
+    }
+
+    Adw.PreferencesGroup {
       title: _("Search");
 
       Adw.SwitchRow whole_words_row {

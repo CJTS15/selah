@@ -462,6 +462,11 @@ impl SelahWindow {
             Some("<Control>n"),
             "win.edit-note",
         ));
+        content.append(&Self::menu_button(
+            &gettext("Read from Here"),
+            None,
+            "win.read-from-here",
+        ));
         if highlighted {
             content.append(&Self::menu_button(
                 &gettext("Remove Highlight"),

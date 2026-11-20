@@ -13,6 +13,7 @@ menu primary_menu {
   }
 
   section {
+    item (_("_Read Aloud"), "win.read-aloud")
     item (_("_Translations…"), "win.translations")
     item (_("_Preferences"), "win.preferences")
     item (_("_Keyboard Shortcuts"), "app.shortcuts")
@@ -413,6 +414,66 @@ template $SelahWindow: Adw.ApplicationWindow {
                     };
                   }
                 };
+
+                // Shown while reading aloud.
+
+                [bottom]
+                ActionBar read_bar {
+                  revealed: false;
+
+                  [start]
+                  Button {
+                    icon-name: "media-skip-backward-symbolic";
+                    tooltip-text: _("Previous Verse");
+                    action-name: "win.read-previous";
+
+                    accessibility {
+                      label: _("Previous Verse");
+                    }
+                  }
+
+                  [start]
+                  Button read_pause {
+                    icon-name: "media-playback-pause-symbolic";
+                    tooltip-text: _("Pause");
+                    action-name: "win.read-aloud";
+
+                    accessibility {
+                      label: _("Pause");
+                    }
+                  }
+
+                  [start]
+                  Button {
+                    icon-name: "media-skip-forward-symbolic";
+                    tooltip-text: _("Next Verse");
+                    action-name: "win.read-next";
+
+                    accessibility {
+                      label: _("Next Verse");
+                    }
+                  }
+
+                  [center]
+                  Label read_label {
+                    ellipsize: end;
+
+                    styles [
+                      "dimmed",
+                    ]
+                  }
+
+                  [end]
+                  Button {
+                    icon-name: "media-playback-stop-symbolic";
+                    tooltip-text: _("Stop Reading");
+                    action-name: "win.read-stop";
+
+                    accessibility {
+                      label: _("Stop Reading");
+                    }
+                  }
+                }
               };
             }
 
