@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Builds the bundle (without releasing) when the release setup changes.
+  pull_request:
+    paths:
+      - build-aux/io.github.cjts15.Selah.json
+      - build-aux/release-notes.py
+      - .github/workflows/release.yml
 
 permissions:
   contents: read
@@ -26,6 +32,7 @@ jobs:
   release:
     name: Publish the GitHub release
     needs: bundle
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
