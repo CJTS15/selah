@@ -297,6 +297,7 @@ impl SelahWindow {
             .set_visible_child_name(if items.is_empty() { "empty" } else { "list" });
 
         let books = imp.books.borrow();
+        let all_books = imp.all_books.borrow();
         let translation = imp.translation_name.borrow();
         let today = glib::DateTime::now_local().ok().map(|d| d.ymd());
         let mut current_group: Option<bool> = None;
@@ -334,13 +335,16 @@ impl SelahWindow {
             }
 
             // Shown as this translation numbers it; the stored reference if absent.
-            // A book hidden by "Show Deuterocanon" counts as absent.
             let present = native
                 .as_ref()
                 .is_some_and(|n| books.iter().any(|b| b.id == n.book));
+            // In the translation, but in a book "Show Deuterocanon" hides.
+            let hidden = native.is_some() && !present;
             let r = native.as_ref().unwrap_or(&item.reference);
-            let book = books.iter().find(|b| b.id == r.book);
-            let name = book.map_or(r.book.as_str(), |b| b.name.as_str());
+            let name = all_books
+                .iter()
+                .find(|b| b.id == r.book)
+                .map_or(r.book.as_str(), |b| b.name.as_str());
 
             let content = gtk::Box::builder()
                 .spacing(12)
@@ -372,6 +376,11 @@ impl SelahWindow {
                     .build(),
             );
             let body = match (text, present) {
+                _ if hidden => gtk::Label::builder()
+                    .label(gettext("Hidden: Show Deuterocanon is off"))
+                    .xalign(0.0)
+                    .css_classes(["dimmed", "caption"])
+                    .build(),
                 (Some(text), _) => gtk::Label::builder()
                     .label(text)
                     .wrap(true)

@@ -101,6 +101,8 @@ mod imp {
         pub error_page: TemplateChild<adw::StatusPage>,
         pub settings: OnceCell<gio::Settings>,
         pub books: RefCell<Vec<BookInfo>>,
+        /// Every book of the open translation, including any the preferences hide.
+        pub all_books: RefCell<Vec<BookInfo>>,
         /// Bundled translations, by name.
         pub translations: RefCell<Vec<TranslationInfo>>,
         /// The open translation's id; empty until one is open.
@@ -971,6 +973,7 @@ impl SelahWindow {
         imp.expanded.set(None);
         imp.highlighted.replace(None);
         imp.current.set(None);
+        *imp.all_books.borrow_mut() = books.clone();
         let mut books = books;
         if !self.settings().boolean("show-deuterocanon") {
             books.retain(|b| b.section != Section::Deuterocanon);

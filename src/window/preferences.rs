@@ -176,6 +176,11 @@ impl SelahWindow {
             })
             .build();
 
+        // The preview shares the reader's tags, so font, size and spacing follow.
+        let preview: gtk::TextView = builder.object("preview").expect(expect);
+        let buffer = gtk::TextBuffer::new(Some(&self.imp().text_view.buffer().tag_table()));
+        preview.set_buffer(Some(&buffer));
+        self.fill_preview(&preview);
         // The default translation is the one opened at start-up: the picker's key.
         let translation_row: adw::ComboRow = builder.object("translation_row").expect(expect);
         let ids: Vec<String> = self
@@ -201,26 +206,25 @@ impl SelahWindow {
         translation_row.connect_selected_notify(glib::clone!(
             #[weak(rename_to = win)]
             self,
+            #[weak]
+            preview,
             move |row| {
                 if let Some(id) = ids.get(row.selected() as usize) {
                     win.switch_translation(id);
+                    // switch_translation sets the new translation's file at once.
+                    win.fill_preview(&preview);
                 }
             }
         ));
 
-        // The preview shares the reader's tags, so font, size and spacing follow.
-        let preview: gtk::TextView = builder.object("preview").expect(expect);
-        let buffer = gtk::TextBuffer::new(Some(&self.imp().text_view.buffer().tag_table()));
-        preview.set_buffer(Some(&buffer));
-        self.fill_preview(&buffer);
         let numbers_changed = settings.connect_changed(
             Some("verse-numbers"),
             glib::clone!(
                 #[weak(rename_to = win)]
                 self,
                 #[weak]
-                buffer,
-                move |_, _| win.fill_preview(&buffer)
+                preview,
+                move |_, _| win.fill_preview(&preview)
             ),
         );
         let numbers_changed = std::cell::Cell::new(Some(numbers_changed));
@@ -237,12 +241,12 @@ impl SelahWindow {
     }
 
     /// Psalm 23:1 from the open translation (John 1:1 if it has no Psalms).
-    fn fill_preview(&self, buffer: &gtk::TextBuffer) {
+    fn fill_preview(&self, preview: &gtk::TextView) {
         let numbers = self.settings().boolean("verse-numbers");
         let path = self.translation_path();
         glib::spawn_future_local(glib::clone!(
             #[weak]
-            buffer,
+            preview,
             async move {
                 let text = gio::spawn_blocking(move || {
                     let translation = Translation::open(&path).ok()?;
@@ -260,6 +264,7 @@ impl SelahWindow {
                 let Some((verse, text)) = text else {
                     return;
                 };
+                let buffer = preview.buffer();
                 buffer.set_text("");
                 let mut end = buffer.end_iter();
                 if numbers {
@@ -274,6 +279,8 @@ impl SelahWindow {
                 buffer.insert(&mut end, &text);
                 let (start, end) = buffer.bounds();
                 buffer.apply_tag_by_name("body", &start, &end);
+                // The preview cannot take focus; screen readers get the verse here.
+                preview.update_property(&[gtk::accessible::Property::Description(&text)]);
             }
         ));
     }
