@@ -334,7 +334,10 @@ impl SelahWindow {
             }
 
             // Shown as this translation numbers it; the stored reference if absent.
-            let present = native.is_some();
+            // A book hidden by "Show Deuterocanon" counts as absent.
+            let present = native
+                .as_ref()
+                .is_some_and(|n| books.iter().any(|b| b.id == n.book));
             let r = native.as_ref().unwrap_or(&item.reference);
             let book = books.iter().find(|b| b.id == r.book);
             let name = book.map_or(r.book.as_str(), |b| b.name.as_str());

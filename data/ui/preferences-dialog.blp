@@ -1,0 +1,128 @@
+using Gtk 4.0;
+using Adw 1;
+// Loaded with GtkBuilder; combo models and settings bindings are set from code.
+Adw.PreferencesDialog dialog {
+  search-enabled: true;
+
+  Adw.PreferencesPage {
+    Adw.PreferencesGroup {
+      title: _("Text");
+      // Shares the reader's text tags, so it looks exactly like the reader.
+      ListBoxRow {
+        activatable: false;
+        selectable: false;
+
+        child: TextView preview {
+          editable: false;
+          cursor-visible: false;
+          can-focus: false;
+          wrap-mode: word_char;
+          top-margin: 16;
+          bottom-margin: 14;
+          left-margin: 16;
+          right-margin: 16;
+
+          accessibility {
+            label: _("Preview");
+          }
+        };
+      }
+
+      Adw.ComboRow font_row {
+        title: _("Reading _Font");
+        use-underline: true;
+      }
+
+      Adw.ActionRow {
+        title: _("Text Size");
+        subtitle: _("Also Ctrl+plus and Ctrl+minus");
+
+        [suffix]
+        Box {
+          valign: center;
+
+          styles [
+            "linked",
+          ]
+
+          accessibility {
+            label: _("Text Size");
+          }
+
+          Button {
+            icon-name: "list-remove-symbolic";
+            tooltip-text: _("Smaller");
+            action-name: "win.zoom-out";
+
+            accessibility {
+              label: _("Smaller");
+            }
+          }
+
+          Label text_size {
+            width-chars: 5;
+
+            styles [
+              "numeric",
+            ]
+          }
+
+          Button {
+            icon-name: "list-add-symbolic";
+            tooltip-text: _("Larger");
+            action-name: "win.zoom-in";
+
+            accessibility {
+              label: _("Larger");
+            }
+          }
+        }
+      }
+
+      Adw.ComboRow line_spacing_row {
+        title: _("_Line Spacing");
+        use-underline: true;
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Layout");
+
+      Adw.ComboRow verse_layout_row {
+        title: _("_Verse Layout");
+        use-underline: true;
+      }
+
+      Adw.SwitchRow verse_numbers_row {
+        title: _("Verse _Numbers");
+        use-underline: true;
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Translations");
+
+      Adw.ComboRow translation_row {
+        title: _("_Default Translation");
+        subtitle: _("Opens at start-up");
+        use-underline: true;
+      }
+
+      Adw.SwitchRow deuterocanon_row {
+        title: _("Show _Deuterocanon");
+        subtitle: _("As its own section, in translations that include it");
+        use-underline: true;
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Search");
+
+      Adw.SwitchRow whole_words_row {
+        title: _("Match _Whole Words");
+        subtitle: _("Otherwise the last word also finds longer words");
+        use-underline: true;
+      }
+    }
+  }
+}

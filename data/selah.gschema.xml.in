@@ -40,6 +40,45 @@
       <default>"default"</default>
       <summary>Colour style: follow the system, light or dark</summary>
     </key>
+    <key name="font" type="s">
+      <choices>
+        <choice value="serif"/>
+        <choice value="sans"/>
+      </choices>
+      <default>"serif"</default>
+      <summary>Reading font: serif or the system sans-serif font</summary>
+    </key>
+    <key name="line-spacing" type="s">
+      <choices>
+        <choice value="comfortable"/>
+        <choice value="compact"/>
+        <choice value="spacious"/>
+      </choices>
+      <default>"comfortable"</default>
+      <summary>Space between lines in the reader</summary>
+    </key>
+    <key name="verse-layout" type="s">
+      <choices>
+        <choice value="paragraphs"/>
+        <choice value="lines"/>
+      </choices>
+      <default>"paragraphs"</default>
+      <summary>Verses in paragraphs, or each verse on its own line</summary>
+    </key>
+    <key name="verse-numbers" type="b">
+      <default>true</default>
+      <summary>Show verse numbers in the reader</summary>
+    </key>
+    <key name="show-deuterocanon" type="b">
+      <default>true</default>
+      <summary>Show the Deuterocanon in translations that include it</summary>
+      <description>When off, its books are left out of the book list, navigation, reference jumps and search. Saved verses are kept.</description>
+    </key>
+    <key name="search-whole-words" type="b">
+      <default>false</default>
+      <summary>Search matches whole words only</summary>
+      <description>When off, the last word typed also matches longer words that start with it.</description>
+    </key>
     <key name="recent-searches" type="as">
       <default>[]</default>
       <summary>Recent searches, newest first</summary>

@@ -13,6 +13,7 @@ use selah_core::user::{Annotation, Filter, Ref, UserDb};
 use crate::config;
 
 mod catalog;
+mod preferences;
 mod saved;
 mod search;
 mod translations;
@@ -211,6 +212,7 @@ mod imp {
             obj.open_user_db();
             obj.setup_verse_actions();
             obj.setup_saved();
+            obj.setup_preferences();
             obj.update_navigation();
 
             self.split_view.connect_collapsed_notify(glib::clone!(
@@ -485,13 +487,30 @@ impl SelahWindow {
         let buffer = self.imp().text_view.buffer();
         // Later tags take priority, so the base "body" tag comes first. Pango's
         // line-height multiplies the font's own line height (about 1.36 em for Noto Serif).
-        buffer.create_tag(
-            Some("body"),
-            &[("family", &"Noto Serif"), ("line-height", &1.35_f32)],
-        );
+        buffer.create_tag(Some("body"), &[]);
         buffer.create_tag(Some("verse-number"), &[]);
         buffer.create_tag(Some("section"), &[("weight", &700_i32)]);
         buffer.create_tag(Some("title"), &[("style", &pango::Style::Italic)]);
+        self.apply_text_style();
+    }
+
+    /// Reading font and line spacing from the preferences.
+    pub(super) fn apply_text_style(&self) {
+        let settings = self.settings();
+        // "Sans" is fontconfig's alias for the system sans-serif font.
+        let family = match settings.string("font").as_str() {
+            "sans" => "Sans",
+            _ => "Noto Serif",
+        };
+        let line_height: f32 = match settings.string("line-spacing").as_str() {
+            "compact" => 1.2,
+            "spacious" => 1.6,
+            _ => 1.35,
+        };
+        if let Some(body) = self.imp().text_view.buffer().tag_table().lookup("body") {
+            body.set_family(Some(family));
+            body.set_line_height(line_height);
+        }
     }
 
     fn zoom(&self) -> f64 {
@@ -952,12 +971,18 @@ impl SelahWindow {
         imp.expanded.set(None);
         imp.highlighted.replace(None);
         imp.current.set(None);
+        let mut books = books;
+        if !self.settings().boolean("show-deuterocanon") {
+            books.retain(|b| b.section != Section::Deuterocanon);
+        }
         *imp.books.borrow_mut() = books;
         self.populate_sidebar();
 
+        // A place in a book that is hidden or missing falls back to the first book.
+        let target = target.filter(|t| imp.books.borrow().iter().any(|b| b.id == t.book));
         match target {
             Some(target) => {
-                self.open_chapter_by_id(&target.book, target.chapter, target.verse.map(|v| (v, v)))
+                self.open_chapter_by_id(&target.book, target.chapter, target.verse.map(|v| (v, v)));
             }
             // The place is missing here: start at the first book.
             None if switched => {
@@ -995,11 +1020,13 @@ impl SelahWindow {
         }
     }
 
-    fn open_chapter_by_id(&self, id: &str, chapter: u32, verses: Option<(u32, u32)>) {
+    /// Opens a chapter by book id; false if the book is not in the list.
+    fn open_chapter_by_id(&self, id: &str, chapter: u32, verses: Option<(u32, u32)>) -> bool {
         let index = self.imp().books.borrow().iter().position(|b| b.id == id);
         if let Some(index) = index {
             self.open_chapter(index, chapter, verses);
         }
+        index.is_some()
     }
 
     fn step_chapter(&self, forward: bool) {
@@ -1092,6 +1119,8 @@ impl SelahWindow {
         buffer.set_text("");
         let mut end = buffer.end_iter();
         let mut first_line = true;
+        let numbers = self.settings().boolean("verse-numbers");
+        let one_per_line = self.settings().string("verse-layout") == "lines";
         // Character offsets of the requested verses, for selection.
         let mut selection: Option<(i32, i32)> = None;
         let mut ranges = Vec::with_capacity(content.verses.len());
@@ -1116,7 +1145,7 @@ impl SelahWindow {
                 );
                 after_heading = true;
             }
-            if verse.para || after_heading {
+            if verse.para || after_heading || one_per_line {
                 new_line(&buffer, &mut end, &mut first_line);
             } else if first_line {
                 first_line = false;
@@ -1124,9 +1153,11 @@ impl SelahWindow {
                 buffer.insert(&mut end, " ");
             }
             let verse_start = end.offset();
-            buffer.insert_with_tags_by_name(&mut end, &verse_label(verse), &["verse-number"]);
-            // Thin space between the number and the verse.
-            buffer.insert(&mut end, "\u{2009}");
+            if numbers {
+                buffer.insert_with_tags_by_name(&mut end, &verse_label(verse), &["verse-number"]);
+                // Thin space between the number and the verse.
+                buffer.insert(&mut end, "\u{2009}");
+            }
             buffer.insert(&mut end, &verse.text);
             ranges.push((verse.verse, verse_start, end.offset()));
             if let Some((first, last)) = verses

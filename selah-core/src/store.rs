@@ -69,15 +69,26 @@ impl SearchResults {
     }
 }
 
-/// Turns typed text into an FTS5 phrase query with the last word as a prefix:
-/// `everlasting li` -> `"everlasting li"*`. Only letters and digits survive, so
-/// user text can never act as FTS5 syntax. `None` if no words remain.
-pub fn fts_query(text: &str) -> Option<String> {
+/// How [`Translation::search`] matches.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SearchOptions {
+    /// The last word must match whole instead of as a prefix.
+    pub whole_words: bool,
+    /// Leave out the Deuterocanon (the "Show Deuterocanon" preference).
+    pub hide_deuterocanon: bool,
+}
+
+/// Turns typed text into an FTS5 phrase query, with the last word as a prefix
+/// unless `whole_words`: `everlasting li` -> `"everlasting li"*`. Only letters
+/// and digits survive, so user text can never act as FTS5 syntax. `None` if no
+/// words remain.
+pub fn fts_query(text: &str, whole_words: bool) -> Option<String> {
     let words: Vec<&str> = text
         .split(|c: char| !c.is_alphanumeric())
         .filter(|w| !w.is_empty())
         .collect();
-    (!words.is_empty()).then(|| format!("\"{}\"*", words.join(" ")))
+    let prefix = if whole_words { "" } else { "*" };
+    (!words.is_empty()).then(|| format!("\"{}\"{prefix}", words.join(" ")))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -413,8 +424,14 @@ impl Translation {
     }
 
     /// Verses matching `text` as a phrase (see [`fts_query`]) within `scope`.
-    pub fn search(&self, text: &str, scope: &Scope, limit: usize) -> Result<SearchResults, Error> {
-        let Some(query) = fts_query(text) else {
+    pub fn search(
+        &self,
+        text: &str,
+        scope: &Scope,
+        limit: usize,
+        options: SearchOptions,
+    ) -> Result<SearchResults, Error> {
+        let Some(query) = fts_query(text, options.whole_words) else {
             return Ok(SearchResults::default());
         };
         let (section, book) = match scope {
@@ -425,12 +442,14 @@ impl Translation {
         const FROM: &str = "FROM verse_fts JOIN verse v ON v.rowid = verse_fts.rowid
              JOIN book b ON b.id = v.book
              WHERE verse_fts MATCH ?1 AND (?2 IS NULL OR b.section = ?2)
-               AND (?3 IS NULL OR v.book = ?3)";
+               AND (?3 IS NULL OR v.book = ?3) AND (?5 = 0 OR b.section <> 'DC')";
 
         let mut stmt = self.conn.prepare(&format!(
             "SELECT b.section, count(*) {FROM} GROUP BY b.section ORDER BY min(b.ord)"
         ))?;
-        let mut rows = stmt.query(params![query, section, book])?;
+        // ?4 is the limit, used only by the second query.
+        let hide = options.hide_deuterocanon;
+        let mut rows = stmt.query(params![query, section, book, 0, hide])?;
         let mut counts = Vec::new();
         while let Some(row) = rows.next()? {
             let section: String = row.get(0)?;
@@ -449,7 +468,7 @@ impl Translation {
              {FROM} ORDER BY b.ord, v.chapter, v.verse LIMIT ?4"
         ))?;
         let hits = stmt
-            .query_map(params![query, section, book, limit], |row| {
+            .query_map(params![query, section, book, limit, hide], |row| {
                 let snippet: String = row.get(3)?;
                 Ok(SearchHit {
                     book: row.get(0)?,
@@ -670,20 +689,31 @@ mod tests {
     #[test]
     fn fts_query_is_a_quoted_phrase() {
         assert_eq!(
-            fts_query("everlasting li").as_deref(),
+            fts_query("everlasting li", false).as_deref(),
             Some("\"everlasting li\"*")
         );
         assert_eq!(
-            fts_query("  \"NEAR(a b)\" OR c* ").as_deref(),
+            fts_query("everlasting li", true).as_deref(),
+            Some("\"everlasting li\"")
+        );
+        assert_eq!(
+            fts_query("  \"NEAR(a b)\" OR c* ", false).as_deref(),
             Some("\"NEAR a b OR c\"*")
         );
-        assert_eq!(fts_query("¿?!").as_deref(), None);
+        assert_eq!(fts_query("¿?!", false).as_deref(), None);
     }
 
     #[test]
     fn kjv_search() {
         let kjv = kjv();
-        let found = kjv.search("everlasting life", &Scope::All, 200).unwrap();
+        let found = kjv
+            .search(
+                "everlasting life",
+                &Scope::All,
+                200,
+                SearchOptions::default(),
+            )
+            .unwrap();
         assert_eq!(found.counts[0], (Section::OldTestament, 1), "only Dan 12:2");
         assert_eq!(
             (
@@ -700,11 +730,18 @@ mod tests {
         );
         assert_eq!(found.total(), found.hits.len());
 
-        let prefix = kjv.search("Everlasting LI", &Scope::All, 200).unwrap();
+        let prefix = kjv
+            .search("Everlasting LI", &Scope::All, 200, SearchOptions::default())
+            .unwrap();
         assert!(prefix.total() >= found.total());
 
         let john = kjv
-            .search("begotten son", &Scope::Book("JHN".into()), 200)
+            .search(
+                "begotten son",
+                &Scope::Book("JHN".into()),
+                200,
+                SearchOptions::default(),
+            )
             .unwrap();
         assert!(john.hits.iter().all(|h| h.book == "JHN"));
         assert!(john.hits.iter().any(|h| (h.chapter, h.verse) == (3, 16)));
@@ -714,6 +751,7 @@ mod tests {
                 "everlasting life",
                 &Scope::Section(Section::NewTestament),
                 3,
+                SearchOptions::default(),
             )
             .unwrap();
         assert_eq!(nt.hits.len(), 3, "limited");
@@ -721,9 +759,49 @@ mod tests {
         assert!(nt.total() > 3);
 
         // Typed FTS5 syntax is treated as words, never as an expression.
-        assert!(kjv.search("\"NEAR( OR *", &Scope::All, 10).is_ok());
+        assert!(
+            kjv.search("\"NEAR( OR *", &Scope::All, 10, SearchOptions::default())
+                .is_ok()
+        );
+
+        // Whole words: "love" no longer finds "loved"; hiding the Deuterocanon
+        // drops its section from counts and hits.
+        let prefix = kjv
+            .search("love", &Scope::All, 10_000, SearchOptions::default())
+            .unwrap();
+        let whole = SearchOptions {
+            whole_words: true,
+            ..SearchOptions::default()
+        };
+        let exact = kjv.search("love", &Scope::All, 10_000, whole).unwrap();
+        assert!(exact.total() < prefix.total());
+        assert!(exact.hits.iter().all(|h| !h.snippet.contains("\u{1}loved")));
+        let hidden = SearchOptions {
+            hide_deuterocanon: true,
+            ..SearchOptions::default()
+        };
+        let no_dc = kjv.search("love", &Scope::All, 10_000, hidden).unwrap();
+        assert!(
+            prefix
+                .counts
+                .iter()
+                .any(|(s, _)| *s == Section::Deuterocanon)
+        );
+        assert!(
+            no_dc
+                .counts
+                .iter()
+                .all(|(s, _)| *s != Section::Deuterocanon)
+        );
+        assert!(
+            no_dc
+                .hits
+                .iter()
+                .all(|h| crate::books::section(&h.book) != Some(Section::Deuterocanon))
+        );
         assert_eq!(
-            kjv.search("…", &Scope::All, 10).unwrap(),
+            kjv.search("…", &Scope::All, 10, SearchOptions::default())
+                .unwrap(),
             SearchResults::default()
         );
     }
@@ -961,7 +1039,10 @@ mod tests {
             );
         }
         assert!(
-            b.search("combined", &Scope::All, 10).unwrap().total() == 1,
+            b.search("combined", &Scope::All, 10, SearchOptions::default())
+                .unwrap()
+                .total()
+                == 1,
             "index rebuilt"
         );
         assert!(rebuild(&source, &out).is_err(), "never overwrites");
