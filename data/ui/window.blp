@@ -415,52 +415,77 @@ template $SelahWindow: Adw.ApplicationWindow {
                   }
                 };
 
-                // Shown while reading aloud.
+                // Shown only while reading aloud (Ctrl+P, Read Aloud): the verse on
+                // the left, the transport controls centred like a music player.
 
                 [bottom]
                 ActionBar read_bar {
                   revealed: false;
 
                   [start]
-                  Button {
-                    icon-name: "media-skip-backward-symbolic";
-                    tooltip-text: _("Previous Verse");
-                    action-name: "win.read-previous";
-
-                    accessibility {
-                      label: _("Previous Verse");
-                    }
-                  }
-
-                  [start]
-                  Button read_pause {
-                    icon-name: "media-playback-pause-symbolic";
-                    tooltip-text: _("Pause");
-                    action-name: "win.read-aloud";
-
-                    accessibility {
-                      label: _("Pause");
-                    }
-                  }
-
-                  [start]
-                  Button {
-                    icon-name: "media-skip-forward-symbolic";
-                    tooltip-text: _("Next Verse");
-                    action-name: "win.read-next";
-
-                    accessibility {
-                      label: _("Next Verse");
-                    }
-                  }
-
-                  [center]
                   Label read_label {
                     ellipsize: end;
+                    margin-start: 6;
 
                     styles [
                       "dimmed",
                     ]
+                  }
+
+                  [center]
+                  Box {
+                    spacing: 18;
+                    margin-top: 6;
+                    margin-bottom: 6;
+
+                    Button {
+                      icon-name: "media-skip-backward-symbolic";
+                      tooltip-text: _("Previous Verse");
+                      action-name: "win.read-previous";
+                      valign: center;
+
+                      styles [
+                        "flat",
+                        "circular",
+                      ]
+
+                      accessibility {
+                        label: _("Previous Verse");
+                      }
+                    }
+
+                    Button read_pause {
+                      icon-name: "media-playback-pause-symbolic";
+                      tooltip-text: _("Pause");
+                      action-name: "win.read-aloud";
+                      valign: center;
+
+                      styles [
+                        "circular",
+                        "suggested-action",
+                        "read-play",
+                      ]
+
+                      accessibility {
+                        label: _("Pause");
+                      }
+                    }
+
+                    Button {
+                      icon-name: "media-skip-forward-symbolic";
+                      tooltip-text: _("Next Verse");
+                      action-name: "win.read-next";
+                      valign: center;
+
+                      styles [
+                        "flat",
+                        "circular",
+                      ]
+
+                      accessibility {
+                        label: _("Next Verse");
+                      }
+                    }
                   }
 
                   [end]
@@ -468,6 +493,12 @@ template $SelahWindow: Adw.ApplicationWindow {
                     icon-name: "media-playback-stop-symbolic";
                     tooltip-text: _("Stop Reading");
                     action-name: "win.read-stop";
+                    valign: center;
+
+                    styles [
+                      "flat",
+                      "circular",
+                    ]
 
                     accessibility {
                       label: _("Stop Reading");
