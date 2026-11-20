@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gettextrs::{gettext, ngettext};
+// Bare `clone!`: xgettext skips strings inside path macros such as `glib::clone!`.
+use gtk::glib::clone;
 use gtk::{gio, glib, pango};
 use selah_core::books::Section;
 use selah_core::import::{HeadingKind, Verse};
@@ -245,14 +247,14 @@ mod imp {
             obj.setup_read_aloud();
             obj.update_navigation();
 
-            self.split_view.connect_collapsed_notify(glib::clone!(
+            self.split_view.connect_collapsed_notify(clone!(
                 #[weak]
                 obj,
                 move |_| obj.update_sidebar_subtitle()
             ));
             // On narrow widths the book list is hidden while reading; bring the
             // current book into view whenever it is shown again.
-            self.split_view.connect_show_content_notify(glib::clone!(
+            self.split_view.connect_show_content_notify(clone!(
                 #[weak]
                 obj,
                 move |split_view| {
@@ -589,24 +591,24 @@ impl SelahWindow {
     fn setup_book_list(&self) {
         let imp = self.imp();
         // Row 2n is book n; row 2n + 1 holds its chapter grid.
-        imp.book_list.set_filter_func(glib::clone!(
+        imp.book_list.set_filter_func(clone!(
             #[weak(rename_to = win)]
             self,
             #[upgrade_or]
             false,
             move |row| win.row_visible(row)
         ));
-        imp.book_list.set_header_func(glib::clone!(
+        imp.book_list.set_header_func(clone!(
             #[weak(rename_to = win)]
             self,
             move |row, before| win.update_header(row, before)
         ));
-        imp.book_list.connect_row_activated(glib::clone!(
+        imp.book_list.connect_row_activated(clone!(
             #[weak(rename_to = win)]
             self,
             move |_, row| win.toggle_book(row.index())
         ));
-        imp.book_filter.connect_search_changed(glib::clone!(
+        imp.book_filter.connect_search_changed(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| {
@@ -780,7 +782,7 @@ impl SelahWindow {
         let frames = Cell::new(0_u32);
         // Tick callbacks run once per frame and only while mapped, so this waits
         // for the first layout after startup or after the filter changed rows.
-        self.imp().book_list.add_tick_callback(glib::clone!(
+        self.imp().book_list.add_tick_callback(clone!(
             #[weak(rename_to = win)]
             self,
             #[upgrade_or]
@@ -871,7 +873,7 @@ impl SelahWindow {
             Some(glib::VariantTy::STRING),
             &"".to_variant(),
         );
-        action.connect_activate(glib::clone!(
+        action.connect_activate(clone!(
             #[weak(rename_to = win)]
             self,
             move |_, param| {
@@ -887,7 +889,7 @@ impl SelahWindow {
 
     /// Finds the translations again, after start-up, an import or a removal.
     pub(super) fn reload_translations(&self) {
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -957,7 +959,7 @@ impl SelahWindow {
         let previous = imp.translation_id.replace(info.id.clone());
         let path = self.translation_path();
         let switched = place.is_some();
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -1131,7 +1133,7 @@ impl SelahWindow {
 
         let path = self.translation_path();
         let id = book.id.clone();
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -1300,7 +1302,7 @@ impl SelahWindow {
             let label = gettext("Note on {reference}").replace("{reference}", &title);
             button.update_property(&[gtk::accessible::Property::Label(&label)]);
         }
-        button.connect_clicked(glib::clone!(
+        button.connect_clicked(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.open_note_dialog(verse)

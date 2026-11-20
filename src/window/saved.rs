@@ -59,12 +59,12 @@ impl SelahWindow {
             &gettext("Recent"),
             &gettext("Bible Order"),
         ])));
-        imp.sidebar_mode.connect_active_name_notify(glib::clone!(
+        imp.sidebar_mode.connect_active_name_notify(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.sidebar_mode_changed()
         ));
-        imp.saved_filters.connect_row_activated(glib::clone!(
+        imp.saved_filters.connect_row_activated(clone!(
             #[weak(rename_to = win)]
             self,
             move |_, row| win.select_filter(row.index())
@@ -84,7 +84,7 @@ impl SelahWindow {
                 row.set_header(None::<&gtk::Widget>);
             }
         });
-        imp.saved_order.connect_selected_notify(glib::clone!(
+        imp.saved_order.connect_selected_notify(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.show_saved()
@@ -238,7 +238,7 @@ impl SelahWindow {
             .filter(|t| t.id != current)
             .map(|t| (t.id.clone(), t.name.clone(), t.path.clone()))
             .collect();
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -502,7 +502,7 @@ impl SelahWindow {
             .title(gettext("Removed"))
             .button_label(gettext("Undo"))
             .build();
-        toast.connect_button_clicked(glib::clone!(
+        toast.connect_button_clicked(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| {

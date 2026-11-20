@@ -85,7 +85,7 @@ impl SelahWindow {
             state.loading = true;
         }
         self.refresh_available();
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -299,7 +299,7 @@ impl SelahWindow {
             .filter(|t| t.built_in)
             .map(|t| (t.id.clone(), t.name.clone()))
             .collect();
-        let task = glib::spawn_future_local(glib::clone!(
+        let task = glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {

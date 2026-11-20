@@ -44,7 +44,7 @@ impl SelahWindow {
         for key in ["font", "line-spacing"] {
             settings.connect_changed(
                 Some(key),
-                glib::clone!(
+                clone!(
                     #[weak(rename_to = win)]
                     self,
                     move |_, _| win.apply_text_style()
@@ -54,7 +54,7 @@ impl SelahWindow {
         for key in ["verse-layout", "verse-numbers"] {
             settings.connect_changed(
                 Some(key),
-                glib::clone!(
+                clone!(
                     #[weak(rename_to = win)]
                     self,
                     move |_, _| win.rerender_chapter()
@@ -64,7 +64,7 @@ impl SelahWindow {
         // Reloading the translation re-filters its books, at the same place.
         settings.connect_changed(
             Some("show-deuterocanon"),
-            glib::clone!(
+            clone!(
                 #[weak(rename_to = win)]
                 self,
                 move |_, _| {
@@ -75,7 +75,7 @@ impl SelahWindow {
         );
         settings.connect_changed(
             Some("search-whole-words"),
-            glib::clone!(
+            clone!(
                 #[weak(rename_to = win)]
                 self,
                 move |_, _| {
@@ -200,7 +200,7 @@ impl SelahWindow {
         if let Some(position) = ids.iter().position(|id| *id == current) {
             translation_row.set_selected(u32::try_from(position).unwrap_or(0));
         }
-        translation_row.connect_selected_notify(glib::clone!(
+        translation_row.connect_selected_notify(clone!(
             #[weak(rename_to = win)]
             self,
             #[weak]
@@ -216,7 +216,7 @@ impl SelahWindow {
 
         let numbers_changed = settings.connect_changed(
             Some("verse-numbers"),
-            glib::clone!(
+            clone!(
                 #[weak(rename_to = win)]
                 self,
                 #[weak]
@@ -225,7 +225,7 @@ impl SelahWindow {
             ),
         );
         let numbers_changed = std::cell::Cell::new(Some(numbers_changed));
-        dialog.connect_closed(glib::clone!(
+        dialog.connect_closed(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| {
@@ -242,7 +242,7 @@ impl SelahWindow {
         let numbers = self.settings().boolean("verse-numbers");
         let path = self.translation_path();
         preview.set_direction(self.text_direction());
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak]
             preview,
             async move {

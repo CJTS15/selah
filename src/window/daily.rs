@@ -22,7 +22,7 @@ impl SelahWindow {
             .build()]);
         self.settings().connect_changed(
             Some("daily-verse"),
-            glib::clone!(
+            clone!(
                 #[weak(rename_to = win)]
                 self,
                 move |_, _| win.update_daily_visibility()
@@ -36,7 +36,7 @@ impl SelahWindow {
         let path = self.translation_path();
         let day = glib::DateTime::now_local().map_or(1, |now| now.day_of_year());
         let day = u32::try_from(day).unwrap_or(1);
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -110,7 +110,7 @@ impl SelahWindow {
         let seconds = u32::try_from(next.difference(&now).as_seconds()).unwrap_or(60) + 1;
         glib::timeout_add_seconds_local_once(
             seconds,
-            glib::clone!(
+            clone!(
                 #[weak(rename_to = win)]
                 self,
                 move || {

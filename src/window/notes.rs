@@ -91,14 +91,14 @@ impl SelahWindow {
         delete.set_visible(existing.is_some());
         dialog.set_focus(Some(&text));
 
-        cancel.connect_clicked(glib::clone!(
+        cancel.connect_clicked(clone!(
             #[weak]
             dialog,
             move |_| {
                 dialog.close();
             }
         ));
-        save.connect_clicked(glib::clone!(
+        save.connect_clicked(clone!(
             #[weak(rename_to = win)]
             self,
             #[weak]
@@ -117,7 +117,7 @@ impl SelahWindow {
                 dialog.close();
             }
         ));
-        delete.connect_clicked(glib::clone!(
+        delete.connect_clicked(clone!(
             #[weak(rename_to = win)]
             self,
             #[weak]
@@ -136,7 +136,7 @@ impl SelahWindow {
         let shortcuts = gtk::ShortcutController::new();
         shortcuts.add_shortcut(gtk::Shortcut::new(
             gtk::ShortcutTrigger::parse_string("<Control>Return"),
-            Some(gtk::CallbackAction::new(glib::clone!(
+            Some(gtk::CallbackAction::new(clone!(
                 #[weak]
                 save,
                 #[upgrade_or]
@@ -158,7 +158,7 @@ impl SelahWindow {
             .title(gettext("Note deleted"))
             .button_label(gettext("Undo"))
             .build();
-        toast.connect_button_clicked(glib::clone!(
+        toast.connect_button_clicked(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| {

@@ -93,7 +93,7 @@ impl SelahWindow {
         // Space pauses and resumes while reading, unless something focused
         // uses it first (buttons, rows) or it is typed into a text field.
         let keys = gtk::EventControllerKey::new();
-        keys.connect_key_pressed(glib::clone!(
+        keys.connect_key_pressed(clone!(
             #[weak(rename_to = win)]
             self,
             #[upgrade_or]
@@ -123,7 +123,7 @@ impl SelahWindow {
             .buffer()
             .create_tag(Some("reading"), &[]);
         self.apply_reading_colour();
-        adw::StyleManager::default().connect_accent_color_notify(glib::clone!(
+        adw::StyleManager::default().connect_accent_color_notify(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.apply_reading_colour()
@@ -285,7 +285,7 @@ impl SelahWindow {
         let speed = speech::words_per_minute(&self.settings().string("read-speed"));
         let text = verses[index].1.clone();
         let next = verses.get(index + 1).cloned();
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -321,7 +321,7 @@ impl SelahWindow {
 
     fn play(&self, audio: &glib::Bytes, generation: u64) {
         let media = gtk::MediaFile::for_input_stream(&gio::MemoryInputStream::from_bytes(audio));
-        media.connect_ended_notify(glib::clone!(
+        media.connect_ended_notify(clone!(
             #[weak(rename_to = win)]
             self,
             move |media| {
@@ -330,7 +330,7 @@ impl SelahWindow {
                 }
             }
         ));
-        media.connect_error_notify(glib::clone!(
+        media.connect_error_notify(clone!(
             #[weak(rename_to = win)]
             self,
             move |media| {

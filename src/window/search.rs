@@ -81,12 +81,12 @@ fn verse_row(book: &str, chapter: u32, verses: (u32, u32)) -> gtk::ListBoxRow {
 impl SelahWindow {
     pub(super) fn setup_search(&self) {
         let imp = self.imp();
-        imp.search_entry.connect_search_changed(glib::clone!(
+        imp.search_entry.connect_search_changed(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.run_search()
         ));
-        imp.search_entry.connect_activate(glib::clone!(
+        imp.search_entry.connect_activate(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| {
@@ -95,12 +95,12 @@ impl SelahWindow {
                 }
             }
         ));
-        imp.search_entry.connect_stop_search(glib::clone!(
+        imp.search_entry.connect_stop_search(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.close_search()
         ));
-        imp.scope_group.connect_active_name_notify(glib::clone!(
+        imp.scope_group.connect_active_name_notify(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.run_search()
@@ -108,7 +108,7 @@ impl SelahWindow {
 
         // Down moves from the entry into the results.
         let keys = gtk::EventControllerKey::new();
-        keys.connect_key_pressed(glib::clone!(
+        keys.connect_key_pressed(clone!(
             #[weak(rename_to = win)]
             self,
             #[upgrade_or]
@@ -188,7 +188,7 @@ impl SelahWindow {
             hide_deuterocanon: !self.settings().boolean("show-deuterocanon"),
         };
         let path = self.translation_path();
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -416,7 +416,7 @@ impl SelahWindow {
                 .hexpand(true)
                 .css_classes(["flat"])
                 .build();
-            clear.connect_clicked(glib::clone!(
+            clear.connect_clicked(clone!(
                 #[weak(rename_to = win)]
                 self,
                 move |_| {
@@ -449,7 +449,7 @@ impl SelahWindow {
                 list.append(&row);
                 self.note_first(&row);
             }
-            list.connect_row_activated(glib::clone!(
+            list.connect_row_activated(clone!(
                 #[weak(rename_to = win)]
                 self,
                 move |_, row| {
