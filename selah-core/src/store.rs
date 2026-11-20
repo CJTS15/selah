@@ -1109,4 +1109,18 @@ mod tests {
         assert!(!out.exists());
         let _ = std::fs::remove_file(garbage);
     }
+
+    #[test]
+    fn daily_verses_are_in_the_kjv() {
+        let kjv = kjv();
+        for key in crate::daily::VERSES {
+            let r = Ref::parse(key).unwrap();
+            assert!(
+                kjv.verse_text(&r.book, r.chapter, r.verse.unwrap())
+                    .unwrap()
+                    .is_some(),
+                "{key}"
+            );
+        }
+    }
 }

@@ -1,5 +1,5 @@
-//! User data: highlights and bookmarks, keyed by canonical references so they
-//! survive removing or switching translations.
+//! User data: highlights, bookmarks and notes, keyed by canonical references so
+//! they survive removing or switching translations.
 
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -59,6 +59,7 @@ impl Colour {
 pub enum Kind {
     Bookmark,
     Highlight,
+    Note,
 }
 
 impl Kind {
@@ -66,7 +67,14 @@ impl Kind {
         match self {
             Self::Bookmark => "bookmark",
             Self::Highlight => "highlight",
+            Self::Note => "note",
         }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        [Self::Bookmark, Self::Highlight, Self::Note]
+            .into_iter()
+            .find(|k| k.as_str() == s)
     }
 }
 
@@ -109,6 +117,8 @@ pub struct Annotation {
     pub kind: Kind,
     pub reference: Ref,
     pub colour: Option<Colour>,
+    /// Note text, for notes.
+    pub body: Option<String>,
     pub created: i64,
     pub modified: i64,
 }
@@ -117,7 +127,16 @@ pub struct Annotation {
 pub enum Filter {
     All,
     Bookmarks,
+    Notes,
     Colour(Colour),
+}
+
+/// How many of each kind are saved, for the Saved filters.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Counts {
+    pub bookmarks: usize,
+    pub notes: usize,
+    pub colours: Vec<(Colour, usize)>,
 }
 
 fn now() -> i64 {
@@ -268,17 +287,78 @@ impl UserDb {
         Ok(())
     }
 
+    /// The note on a verse, if it has one.
+    pub fn note_of(&self, reference: &Ref) -> Result<Option<String>, Error> {
+        let body: Option<Option<String>> = self
+            .conn
+            .query_row(
+                "SELECT body FROM annotation WHERE kind = 'note' AND ref_start = ?1",
+                params![reference.key()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(body.flatten())
+    }
+
+    /// Verses of a chapter that have a note.
+    pub fn verse_notes(&self, book: &str, chapter: u32) -> Result<Vec<u32>, Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ref_start FROM annotation WHERE kind = 'note' AND ref_start LIKE ?1",
+        )?;
+        let mut rows = stmt.query(params![format!("{book}.{chapter}.%")])?;
+        let mut verses = Vec::new();
+        while let Some(row) = rows.next()? {
+            let key: String = row.get(0)?;
+            if let Some(Ref {
+                verse: Some(verse), ..
+            }) = Ref::parse(&key)
+            {
+                verses.push(verse);
+            }
+        }
+        Ok(verses)
+    }
+
+    /// Writes a verse's note, keeping when it was first written. Text that is
+    /// empty or only whitespace removes the note.
+    pub fn set_note(&mut self, reference: &Ref, body: &str) -> Result<(), Error> {
+        let key = reference.key();
+        let body = body.trim();
+        let tx = self.conn.transaction()?;
+        let created: Option<i64> = tx
+            .query_row(
+                "SELECT created FROM annotation WHERE kind = 'note' AND ref_start = ?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .optional()?;
+        tx.execute(
+            "DELETE FROM annotation WHERE kind = 'note' AND ref_start = ?1",
+            params![key],
+        )?;
+        if !body.is_empty() {
+            let time = now();
+            tx.execute(
+                "INSERT INTO annotation (kind, ref_start, ref_end, body, created, modified)
+                 VALUES ('note', ?1, ?1, ?2, ?3, ?4)",
+                params![key, body, created.unwrap_or(time), time],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Annotations matching `filter`, most recently changed first.
     pub fn list(&self, filter: Filter) -> Result<Vec<Annotation>, Error> {
         let (kind, colour) = match filter {
             Filter::All => (None, None),
             Filter::Bookmarks => (Some(Kind::Bookmark.as_str()), None),
+            Filter::Notes => (Some(Kind::Note.as_str()), None),
             Filter::Colour(colour) => (Some(Kind::Highlight.as_str()), Some(colour.as_str())),
         };
         let mut stmt = self.conn.prepare(
-            "SELECT id, kind, ref_start, colour, created, modified FROM annotation
-             WHERE kind IN ('bookmark', 'highlight')
-               AND (?1 IS NULL OR kind = ?1) AND (?2 IS NULL OR colour = ?2)
+            "SELECT id, kind, ref_start, colour, body, created, modified FROM annotation
+             WHERE (?1 IS NULL OR kind = ?1) AND (?2 IS NULL OR colour = ?2)
              ORDER BY modified DESC, id DESC",
         )?;
         let mut rows = stmt.query(params![kind, colour])?;
@@ -287,12 +367,8 @@ impl UserDb {
             let kind: String = row.get(1)?;
             let key: String = row.get(2)?;
             let colour: Option<String> = row.get(3)?;
-            let kind = match kind.as_str() {
-                "bookmark" => Kind::Bookmark,
-                _ => Kind::Highlight,
-            };
             // Rows that do not parse are skipped, never deleted.
-            let Some(reference) = Ref::parse(&key) else {
+            let (Some(kind), Some(reference)) = (Kind::parse(&kind), Ref::parse(&key)) else {
                 continue;
             };
             annotations.push(Annotation {
@@ -300,16 +376,18 @@ impl UserDb {
                 kind,
                 reference,
                 colour: colour.as_deref().and_then(Colour::parse),
-                created: row.get(4)?,
-                modified: row.get(5)?,
+                body: row.get(4)?,
+                created: row.get(5)?,
+                modified: row.get(6)?,
             });
         }
         Ok(annotations)
     }
 
-    /// Number of bookmarks and of highlights per colour.
-    pub fn counts(&self) -> Result<(usize, Vec<(Colour, usize)>), Error> {
+    /// Number of bookmarks, notes and highlights per colour.
+    pub fn counts(&self) -> Result<Counts, Error> {
         let bookmarks = self.list(Filter::Bookmarks)?.len();
+        let notes = self.list(Filter::Notes)?.len();
         let mut colours = Vec::new();
         for colour in Colour::ALL {
             let n: i64 = self.conn.query_row(
@@ -319,7 +397,11 @@ impl UserDb {
             )?;
             colours.push((colour, usize::try_from(n).unwrap_or(0)));
         }
-        Ok((bookmarks, colours))
+        Ok(Counts {
+            bookmarks,
+            notes,
+            colours,
+        })
     }
 
     pub fn delete(&self, id: i64) -> Result<(), Error> {
@@ -332,12 +414,13 @@ impl UserDb {
     pub fn restore(&self, annotation: &Annotation) -> Result<(), Error> {
         let key = annotation.reference.key();
         self.conn.execute(
-            "INSERT INTO annotation (kind, ref_start, ref_end, colour, created, modified)
-             VALUES (?1, ?2, ?2, ?3, ?4, ?5)",
+            "INSERT INTO annotation (kind, ref_start, ref_end, colour, body, created, modified)
+             VALUES (?1, ?2, ?2, ?3, ?4, ?5, ?6)",
             params![
                 annotation.kind.as_str(),
                 key,
                 annotation.colour.map(Colour::as_str),
+                annotation.body,
                 annotation.created,
                 annotation.modified
             ],
@@ -445,7 +528,8 @@ mod tests {
         db.set_highlight(&verse("PSA", 23, 1), Colour::Blue)
             .unwrap();
 
-        let (bookmarks, colours) = db.counts().unwrap();
+        let counts = db.counts().unwrap();
+        let (bookmarks, colours) = (counts.bookmarks, counts.colours);
         assert_eq!(bookmarks, 2, "bookmarking twice keeps one");
         assert!(colours.contains(&(Colour::Blue, 1)));
         assert!(colours.contains(&(Colour::Yellow, 0)));
@@ -466,5 +550,37 @@ mod tests {
 
         db.set_bookmark(&chapter, false).unwrap();
         assert!(!db.is_bookmarked(&chapter).unwrap());
+    }
+
+    #[test]
+    fn notes_edit_list_and_undo() {
+        let mut db = db();
+        let john = verse("JHN", 3, 16);
+        assert_eq!(db.note_of(&john).unwrap(), None);
+
+        db.set_note(&john, "  God's love  ").unwrap();
+        assert_eq!(db.note_of(&john).unwrap().as_deref(), Some("God's love"));
+        let first = db.list(Filter::Notes).unwrap()[0].clone();
+
+        // Editing replaces the text and keeps the creation time.
+        db.set_note(&john, "For the world").unwrap();
+        let notes = db.list(Filter::Notes).unwrap();
+        assert_eq!(notes.len(), 1, "one note per verse");
+        assert_eq!(notes[0].kind, Kind::Note);
+        assert_eq!(notes[0].body.as_deref(), Some("For the world"));
+        assert_eq!(notes[0].created, first.created);
+        assert_eq!(db.verse_notes("JHN", 3).unwrap(), vec![16]);
+        assert_eq!(db.counts().unwrap().notes, 1);
+        assert_eq!(db.list(Filter::All).unwrap().len(), 1, "All includes notes");
+
+        db.delete(notes[0].id).unwrap();
+        assert_eq!(db.note_of(&john).unwrap(), None);
+        db.restore(&notes[0]).unwrap();
+        assert_eq!(db.note_of(&john).unwrap().as_deref(), Some("For the world"));
+
+        // Blank text removes the note.
+        db.set_note(&john, " \n ").unwrap();
+        assert_eq!(db.note_of(&john).unwrap(), None);
+        assert!(db.verse_notes("JHN", 3).unwrap().is_empty());
     }
 }
