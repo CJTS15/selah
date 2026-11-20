@@ -70,6 +70,11 @@ impl SelahWindow {
             return;
         };
         let existing = self.with_db(|db| db.note_of(&reference)).flatten();
+        // GTK scrolls to the cursor when focus comes back; keep that at this verse.
+        if let Some((start, _)) = self.verse_range(verse) {
+            let buffer = self.imp().text_view.buffer();
+            buffer.place_cursor(&buffer.iter_at_offset(start));
+        }
 
         let builder = gtk::Builder::from_resource("/io/github/cjts15/Selah/ui/note-dialog.ui");
         let expect = "defined in note-dialog.blp";
@@ -142,6 +147,8 @@ impl SelahWindow {
                 }
             ))),
         ));
+        // Capture phase: the text view would otherwise take Ctrl+Enter first.
+        shortcuts.set_propagation_phase(gtk::PropagationPhase::Capture);
         dialog.add_controller(shortcuts);
         dialog.present(Some(self));
     }

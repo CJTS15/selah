@@ -172,6 +172,56 @@ template $SelahWindow: Adw.ApplicationWindow {
             }
           }
 
+          // First in the sidebar once the day's verse is loaded (Preferences can hide it).
+
+          [top]
+          Button daily_card {
+            visible: false;
+            margin-start: 12;
+            margin-end: 12;
+            margin-bottom: 6;
+            action-name: "win.open-daily-verse";
+
+            styles [
+              "card",
+            ]
+
+            child: Box {
+              orientation: vertical;
+              spacing: 3;
+              margin-top: 9;
+              margin-bottom: 9;
+              margin-start: 12;
+              margin-end: 12;
+
+              Label {
+                label: _("Verse of the Day");
+                xalign: 0;
+
+                styles [
+                  "caption-heading",
+                  "dimmed",
+                ]
+              }
+
+              Label daily_reference {
+                xalign: 0;
+
+                styles [
+                  "heading",
+                ]
+              }
+
+              Label daily_text {
+                xalign: 0;
+                wrap: true;
+                wrap-mode: word_char;
+                lines: 4;
+                ellipsize: end;
+              }
+            };
+          }
+
           [top]
           Adw.ToggleGroup sidebar_mode {
             margin-start: 12;

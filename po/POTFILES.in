@@ -7,6 +7,7 @@ data/ui/translations-dialog.blp
 data/ui/window.blp
 src/window.rs
 src/window/catalog.rs
+src/window/daily.rs
 src/window/notes.rs
 src/window/preferences.rs
 src/window/saved.rs

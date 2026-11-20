@@ -232,6 +232,13 @@ impl SelahWindow {
         if text_view.buffer().has_selection() {
             return;
         }
+        // A click on a note mark (a button inside the text) is the button's own.
+        if text_view
+            .pick(x, y, gtk::PickFlags::DEFAULT)
+            .is_some_and(|w| w.ancestor(gtk::Button::static_type()).is_some())
+        {
+            return;
+        }
         // Truncation is fine: buffer coordinates are whole pixels.
         let (bx, by) =
             text_view.window_to_buffer_coords(gtk::TextWindowType::Widget, x as i32, y as i32);
