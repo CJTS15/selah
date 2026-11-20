@@ -2,6 +2,7 @@
 //! search. It has no GTK dependency so it can be tested and fuzzed on its own.
 
 pub mod books;
+pub mod catalog;
 pub mod import;
 pub mod refs;
 pub mod store;
