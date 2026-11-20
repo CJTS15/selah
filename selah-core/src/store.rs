@@ -3,13 +3,14 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use rusqlite::config::DbConfig;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 
 use crate::Error;
-use crate::books::Section;
-use crate::import::{Book, Heading, HeadingKind, Meta, Verse};
+use crate::books::{self, Section};
+use crate::import::{self, Book, Heading, HeadingKind, Meta, Verse};
 use crate::user::Ref;
-use crate::versification::Mapping;
+use crate::versification::{self, Mapping};
 
 const SCHEMA_VERSION: i32 = 3;
 
@@ -104,7 +105,155 @@ pub fn create(path: &Path, meta: &Meta, books: &[Book], mapping: &Mapping) -> Re
             path.display()
         )));
     }
-    write(&mut Connection::open(path)?, meta, books, mapping)
+    let result = Connection::open(path)
+        .map_err(Error::from)
+        .and_then(|mut conn| write(&mut conn, meta, books, mapping));
+    if result.is_err() {
+        // A failed write leaves no partial file behind.
+        let _ = std::fs::remove_file(path);
+    }
+    result
+}
+
+/// `canon_book`, `canon_chapter`, `canon_verse` of a `verse_map` row.
+type CanonicalColumns = (Option<String>, Option<u32>, Option<u32>);
+
+/// Checks an untrusted translation database, such as one unpacked from a
+/// package, and writes a clean copy to `out`, which must not exist. Only the
+/// rows Selah reads are copied, so triggers, views or extra tables in the
+/// input never reach the copy. Returns the copy's metadata.
+pub fn rebuild(untrusted: &Path, out: &Path) -> Result<Meta, Error> {
+    let invalid = |message: String| Error::InvalidData(message);
+    let conn = Connection::open_with_flags(
+        untrusted,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    // Hardening for databases from elsewhere (sqlite.org/security.html).
+    conn.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?;
+    conn.set_db_config(DbConfig::SQLITE_DBCONFIG_TRUSTED_SCHEMA, false)?;
+
+    let check: String = conn.query_row("PRAGMA quick_check", [], |row| row.get(0))?;
+    if check != "ok" {
+        return Err(invalid(format!("damaged database: {check}")));
+    }
+    let version: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version != SCHEMA_VERSION {
+        return Err(invalid(format!("unsupported schema version {version}")));
+    }
+    for table in ["meta", "book", "verse", "heading", "verse_map"] {
+        let kind: Option<String> = conn
+            .query_row(
+                "SELECT type FROM sqlite_schema WHERE name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if kind.as_deref() != Some("table") {
+            return Err(invalid(format!("missing table {table}")));
+        }
+    }
+
+    let mut stmt = conn.prepare("SELECT key, value FROM meta")?;
+    let meta: Meta = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    import::check_meta(&meta)?;
+
+    let mut stmt = conn.prepare("SELECT id, name, abbrev FROM book ORDER BY ord")?;
+    let rows: Vec<(String, String, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect::<Result<_, _>>()?;
+    let mut verse_stmt = conn.prepare(
+        "SELECT chapter, verse, verse_end, para, text FROM verse
+         WHERE book = ?1 ORDER BY chapter, verse",
+    )?;
+    let mut heading_stmt = conn.prepare(
+        "SELECT chapter, before_verse, kind, text FROM heading
+         WHERE book = ?1 ORDER BY chapter, before_verse, rowid",
+    )?;
+    let mut books = Vec::with_capacity(rows.len());
+    for (id, name, abbrev) in rows {
+        // The section comes from the id, never from the input.
+        let section =
+            books::section(&id).ok_or_else(|| invalid(format!("unknown book id {id:?}")))?;
+        let verses: Vec<Verse> = verse_stmt
+            .query_map([&id], |row| {
+                Ok(Verse {
+                    chapter: row.get(0)?,
+                    verse: row.get(1)?,
+                    verse_end: row.get(2)?,
+                    para: row.get(3)?,
+                    text: row.get(4)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        if let Some(bad) = verses.iter().find(|v| {
+            v.chapter == 0
+                || v.verse == 0
+                || v.verse_end.is_some_and(|end| end <= v.verse)
+                || v.text.is_empty()
+        }) {
+            return Err(invalid(format!(
+                "bad verse {id} {}:{}",
+                bad.chapter, bad.verse
+            )));
+        }
+        let mut headings = Vec::new();
+        let mut rows = heading_stmt.query([&id])?;
+        while let Some(row) = rows.next()? {
+            let kind: String = row.get(2)?;
+            headings.push(Heading {
+                chapter: row.get(0)?,
+                before_verse: row.get(1)?,
+                kind: HeadingKind::parse(&kind)
+                    .ok_or_else(|| invalid(format!("heading kind {kind:?}")))?,
+                text: row.get(3)?,
+            });
+        }
+        books.push(Book {
+            id,
+            section,
+            name,
+            abbrev,
+            verses,
+            headings,
+        });
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT book, chapter, verse, canon_book, canon_chapter, canon_verse FROM verse_map",
+    )?;
+    let rows: Vec<(Ref, CanonicalColumns)> = stmt
+        .query_map([], |row| {
+            let from = Ref {
+                book: row.get(0)?,
+                chapter: row.get(1)?,
+                verse: Some(row.get(2)?),
+            };
+            Ok((from, (row.get(3)?, row.get(4)?, row.get(5)?)))
+        })?
+        .collect::<Result<_, _>>()?;
+    let mut mapping = Mapping::with_capacity(rows.len());
+    for (from, (book, chapter, verse)) in rows {
+        let to = match (book, chapter, verse) {
+            (None, None, None) => None,
+            (Some(book), Some(chapter), Some(verse))
+                if books::section(&book).is_some() && chapter > 0 && verse > 0 =>
+            {
+                Some(Ref {
+                    book,
+                    chapter,
+                    verse: Some(verse),
+                })
+            }
+            _ => return Err(invalid(format!("bad versification entry {}", from.key()))),
+        };
+        mapping.push((from, to));
+    }
+    versification::check_mapping(&books, &mapping)?;
+
+    create(out, &meta, &books, &mapping)?;
+    Ok(meta)
 }
 
 fn write(
@@ -762,5 +911,121 @@ mod tests {
                 "{book} {chapter}:{verse}"
             );
         }
+    }
+
+    /// A fresh path in the temp directory, removed first.
+    fn temp_path(name: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("selah-test-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        path
+    }
+
+    /// A small translation file with a combined verse, a heading and a mapping.
+    fn small_translation(name: &str) -> std::path::PathBuf {
+        use crate::import::{parse_meta, parse_usfm};
+        use crate::versification::parse_mapping;
+
+        let path = temp_path(name);
+        let meta =
+            parse_meta("id=test\nname=Test\nlanguage=en\ndirection=ltr\nlicence=PD\n").unwrap();
+        let books = vec![
+            parse_usfm("\\id ROM\n\\c 14\n\\s1 Judging\n\\p\n\\v 23 Sin.\n\\v 24 Now to him.\n\\c 16\n\\v 24 Grace.\n")
+                .unwrap(),
+            parse_usfm("\\id SIR\n\\c 11\n\\v 14 Good.\n\\v 15-16 Combined.\n").unwrap(),
+        ];
+        let mapping = parse_mapping("ROM 14:24 = ROM 16:25\nROM 14:23 = none").unwrap();
+        create(&path, &meta, &books, &mapping).unwrap();
+        path
+    }
+
+    fn tamper(path: &Path, sql: &str) {
+        Connection::open(path).unwrap().execute_batch(sql).unwrap();
+    }
+
+    #[test]
+    fn rebuild_round_trip() {
+        let source = small_translation("round-src");
+        let out = temp_path("round-out");
+        let meta = rebuild(&source, &out).unwrap();
+        assert!(meta.contains(&("id".into(), "test".into())));
+
+        let (a, b) = (
+            Translation::open(&source).unwrap(),
+            Translation::open(&out).unwrap(),
+        );
+        assert_eq!(a.books().unwrap(), b.books().unwrap());
+        for (book, chapter) in [("ROM", 14), ("ROM", 16), ("SIR", 11)] {
+            assert_eq!(
+                a.chapter(book, chapter).unwrap(),
+                b.chapter(book, chapter).unwrap()
+            );
+        }
+        assert!(
+            b.search("combined", &Scope::All, 10).unwrap().total() == 1,
+            "index rebuilt"
+        );
+        assert!(rebuild(&source, &out).is_err(), "never overwrites");
+        let _ = std::fs::remove_file(source);
+        let _ = std::fs::remove_file(out);
+    }
+
+    #[test]
+    fn rebuild_drops_extra_schema() {
+        let source = small_translation("extra-src");
+        tamper(
+            &source,
+            "CREATE TABLE evil (x); CREATE VIEW v AS SELECT 1;
+             CREATE TRIGGER t AFTER INSERT ON verse BEGIN DELETE FROM verse; END;",
+        );
+        let out = temp_path("extra-out");
+        rebuild(&source, &out).unwrap();
+        let names: Vec<String> = Connection::open(&out)
+            .unwrap()
+            .prepare("SELECT name FROM sqlite_schema WHERE name IN ('evil', 'v', 't')")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(names.is_empty(), "{names:?}");
+        let _ = std::fs::remove_file(source);
+        let _ = std::fs::remove_file(out);
+    }
+
+    #[test]
+    fn rebuild_refuses_bad_input() {
+        for (name, sql) in [
+            ("version", "PRAGMA user_version = 2;"),
+            ("id", "UPDATE meta SET value = '../x' WHERE key = 'id';"),
+            ("licence", "DELETE FROM meta WHERE key = 'licence';"),
+            (
+                "book",
+                "UPDATE book SET id = 'XYZ' WHERE id = 'SIR'; UPDATE verse SET book = 'XYZ' WHERE book = 'SIR';",
+            ),
+            ("verse", "UPDATE verse SET text = '' WHERE verse = 14;"),
+            ("type", "UPDATE verse SET chapter = 'one' WHERE verse = 14;"),
+            (
+                "view",
+                "DROP TABLE verse_map; CREATE VIEW verse_map AS SELECT * FROM verse;",
+            ),
+            (
+                "mapping",
+                "INSERT INTO verse_map VALUES ('ROM', 16, 24, 'ROM', 16, 25);",
+            ),
+        ] {
+            let source = small_translation(&format!("bad-{name}"));
+            tamper(&source, sql);
+            let out = temp_path(&format!("bad-{name}-out"));
+            assert!(rebuild(&source, &out).is_err(), "{name} accepted");
+            assert!(!out.exists(), "{name} left a file");
+            let _ = std::fs::remove_file(source);
+        }
+
+        let garbage = temp_path("garbage");
+        std::fs::write(&garbage, b"not a database at all").unwrap();
+        let out = temp_path("garbage-out");
+        assert!(rebuild(&garbage, &out).is_err());
+        assert!(!out.exists());
+        let _ = std::fs::remove_file(garbage);
     }
 }

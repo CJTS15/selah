@@ -5,6 +5,17 @@ use selah_core::user::{Colour, Kind, Ref};
 use super::verse::colour_name;
 use super::*;
 
+/// Where a saved item is in the open translation.
+#[derive(Debug)]
+struct Shown {
+    /// The reference as this translation numbers it, if it has it.
+    at: Option<Ref>,
+    /// The verse text, for verse items.
+    text: Option<String>,
+    /// Another translation (id, name) that has it, when this one does not.
+    elsewhere: Option<(String, String)>,
+}
+
 /// Sidebar filter rows: All, Bookmarks, then one per colour.
 fn filter_at(index: i32) -> Option<Filter> {
     match index {
@@ -209,12 +220,23 @@ impl SelahWindow {
         imp.saved_generation.set(generation);
         let path = self.translation_path();
         let refs: Vec<_> = items.iter().map(|a| a.reference.clone()).collect();
+        // Other translations, to offer one that has a verse this one lacks.
+        let current = imp.translation_id.borrow().clone();
+        let others: Vec<(String, String, PathBuf)> = imp
+            .translations
+            .borrow()
+            .iter()
+            .filter(|t| t.id != current)
+            .map(|t| (t.id.clone(), t.name.clone(), t.path.clone()))
+            .collect();
         glib::spawn_future_local(glib::clone!(
             #[weak(rename_to = win)]
             self,
             async move {
                 let result = gio::spawn_blocking(move || {
                     let translation = Translation::open(&path)?;
+                    let mut opened: Vec<Option<Translation>> =
+                        others.iter().map(|_| None).collect();
                     // Where each saved reference is in this translation, with its text.
                     refs.iter()
                         .map(|r| {
@@ -227,7 +249,28 @@ impl SelahWindow {
                                 }) => translation.verse_text(book, *chapter, *verse)?,
                                 _ => None,
                             };
-                            Ok::<_, selah_core::Error>((shown, text))
+                            let mut elsewhere = None;
+                            if shown.is_none() {
+                                for ((id, name, path), other) in others.iter().zip(&mut opened) {
+                                    // A damaged file only loses the offer.
+                                    if other.is_none() {
+                                        *other = Translation::open(path).ok();
+                                    }
+                                    let has = other
+                                        .as_ref()
+                                        .and_then(|t| t.from_canonical(r).ok().flatten())
+                                        .is_some();
+                                    if has {
+                                        elsewhere = Some((id.clone(), name.clone()));
+                                        break;
+                                    }
+                                }
+                            }
+                            Ok::<_, selah_core::Error>(Shown {
+                                at: shown,
+                                text,
+                                elsewhere,
+                            })
                         })
                         .collect::<Result<Vec<_>, _>>()
                 })
@@ -244,13 +287,7 @@ impl SelahWindow {
         ));
     }
 
-    /// `shown` holds where each item is in this translation, and its verse text.
-    fn render_saved(
-        &self,
-        items: &[Annotation],
-        shown: &[(Option<Ref>, Option<String>)],
-        bible_order: bool,
-    ) {
+    fn render_saved(&self, items: &[Annotation], shown: &[Shown], bible_order: bool) {
         let imp = self.imp();
         let page = &imp.saved_list;
         while let Some(child) = page.first_child() {
@@ -265,7 +302,8 @@ impl SelahWindow {
         let mut current_group: Option<bool> = None;
         let mut list: Option<gtk::ListBox> = None;
 
-        for (item, (native, text)) in items.iter().zip(shown) {
+        for (item, shown) in items.iter().zip(shown) {
+            let (native, text) = (&shown.at, &shown.text);
             // Recent order groups by day: Today, then Earlier.
             let is_today = glib::DateTime::from_unix_local(item.modified)
                 .ok()
@@ -343,12 +381,24 @@ impl SelahWindow {
                     .xalign(0.0)
                     .css_classes(["dimmed", "caption"])
                     .build(),
-                (None, false) => gtk::Label::builder()
+                (None, false) => {
                     // Translators: {translation} is a Bible translation name.
-                    .label(gettext("Not in {translation}").replace("{translation}", &translation))
-                    .xalign(0.0)
-                    .css_classes(["dimmed", "caption"])
-                    .build(),
+                    let mut label =
+                        gettext("Not in {translation}").replace("{translation}", &translation);
+                    if let Some((_, other)) = &shown.elsewhere {
+                        // Translators: follows "Not in …"; {translation} is a Bible translation name.
+                        label = format!(
+                            "{label}. {}",
+                            gettext("Open in {translation}").replace("{translation}", other)
+                        );
+                    }
+                    gtk::Label::builder()
+                        .label(label)
+                        .wrap(true)
+                        .xalign(0.0)
+                        .css_classes(["dimmed", "caption"])
+                        .build()
+                }
             };
             labels.append(&body);
             content.append(&labels);
@@ -372,8 +422,14 @@ impl SelahWindow {
 
             let row = gtk::ListBoxRow::builder()
                 .child(&content)
-                .activatable(present)
+                .activatable(present || shown.elsewhere.is_some())
                 .build();
+            if let Some((id, _)) = shown.elsewhere.as_ref().filter(|_| !present) {
+                row.set_action_name(Some("win.open-in-translation"));
+                row.set_action_target_value(Some(
+                    &(id.as_str(), item.reference.key().as_str()).to_variant(),
+                ));
+            }
             if present {
                 match r.verse {
                     Some(verse) => {

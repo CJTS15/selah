@@ -122,12 +122,33 @@ pub fn parse_meta(src: &str) -> Result<Meta, Error> {
             .ok_or_else(|| Error::Meta(format!("expected key=value, found {line:?}")))?;
         meta.push((key.trim().to_owned(), value.trim().to_owned()));
     }
+    check_meta(&meta)?;
+    Ok(meta)
+}
+
+/// Requires the keys every translation needs and a usable id.
+pub fn check_meta(meta: &Meta) -> Result<(), Error> {
     for key in REQUIRED_META {
         if !meta.iter().any(|(k, _)| k == key) {
             return Err(Error::Meta(format!("missing {key}")));
         }
     }
-    Ok(meta)
+    let id = meta
+        .iter()
+        .find(|(k, _)| k == "id")
+        .map(|(_, v)| v.as_str());
+    if !id.is_some_and(valid_id) {
+        return Err(Error::Meta(format!("unusable id {id:?}")));
+    }
+    Ok(())
+}
+
+/// Ids name files, so only letters, digits, `-` and `_` are allowed.
+pub fn valid_id(id: &str) -> bool {
+    (1..=64).contains(&id.len())
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -521,6 +542,11 @@ mod tests {
                 .unwrap();
         assert_eq!(meta[0], ("id".into(), "eng-kjv".into()));
         assert!(parse_meta("id=x\n").is_err());
+        assert!(parse_meta("id=../x\nname=x\nlanguage=en\ndirection=ltr\nlicence=PD\n").is_err());
+        assert!(valid_id("eng-kjv") && valid_id("eng_web2"));
+        assert!(
+            !valid_id("") && !valid_id("a/b") && !valid_id("a.b") && !valid_id(&"x".repeat(65))
+        );
         assert!(parse_meta("nonsense\n").is_err());
     }
 }
