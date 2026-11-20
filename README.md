@@ -71,15 +71,17 @@ Meson and packaged with Flatpak.
 The easiest way is [GNOME Builder](https://apps.gnome.org/Builder/): clone
 the repository, open it and press **Run**.
 
-From a terminal, with
+From a terminal, use
 [flatpak-builder](https://docs.flatpak.org/en/latest/flatpak-builder.html)
-(`org.flatpak.Builder` from Flathub) and the GNOME 51 SDK installed:
+(`org.flatpak.Builder` from Flathub). It installs the GNOME 51 SDK and its
+Rust extension from Flathub if they are missing:
 
 ```sh
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 git clone https://github.com/CJTS15/selah.git
 cd selah
-flatpak run org.flatpak.Builder --user --install --force-clean \
-  build-dir build-aux/io.github.cjts15.Selah.Devel.json
+flatpak run org.flatpak.Builder --user --install --install-deps-from=flathub \
+  --force-clean build-dir build-aux/io.github.cjts15.Selah.Devel.json
 flatpak run io.github.cjts15.Selah.Devel
 ```
 

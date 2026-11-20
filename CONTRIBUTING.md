@@ -44,8 +44,8 @@ stand for.
 ### Build and run
 
 ```sh
-flatpak run org.flatpak.Builder --user --install --force-clean \
-  build-dir build-aux/io.github.cjts15.Selah.Devel.json
+flatpak run org.flatpak.Builder --user --install --install-deps-from=flathub \
+  --force-clean build-dir build-aux/io.github.cjts15.Selah.Devel.json
 flatpak run io.github.cjts15.Selah.Devel
 ```
 
