@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: selah\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-20 17:23+0800\n"
+"POT-Creation-Date: 2026-11-20 18:20+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -81,32 +81,41 @@ msgid ""
 "catalogue and the translations you choose."
 msgstr ""
 
-#: data/selah.metainfo.xml.in.in:39
+#: data/selah.metainfo.xml.in.in:40
 msgid "Read with highlights, bookmarks and notes"
 msgstr ""
 
-#: data/selah.metainfo.xml.in.in:43
+#: data/selah.metainfo.xml.in.in:44
 msgid "Search the whole Bible or one part of it"
 msgstr ""
 
-#: data/selah.metainfo.xml.in.in:47
+#: data/selah.metainfo.xml.in.in:48
 msgid "Find your highlights, bookmarks and notes again"
 msgstr ""
 
-#: data/selah.metainfo.xml.in.in:51
+#: data/selah.metainfo.xml.in.in:52
 msgid "Add openly licensed translations"
 msgstr ""
 
-#: data/selah.metainfo.xml.in.in:55
+#: data/selah.metainfo.xml.in.in:56
 msgid "Listen verse by verse, in light or dark style"
 msgstr ""
 
-#: data/selah.metainfo.xml.in.in:59
+#: data/selah.metainfo.xml.in.in:60
 msgid "Fits phones and narrow windows"
 msgstr ""
 
-#: data/selah.metainfo.xml.in.in:70
-msgid "First release."
+#: data/selah.metainfo.xml.in.in:71
+msgid ""
+"The first release of Selah: read the King James Version and the World "
+"English Bible offline, add openly licensed translations from the Selah "
+"catalogue, and search by words or reference."
+msgstr ""
+
+#: data/selah.metainfo.xml.in.in:76
+msgid ""
+"Highlight, bookmark and take notes on verses, start the day with a verse of "
+"the day, and have chapters read aloud verse by verse."
 msgstr ""
 
 #: data/ui/note-dialog.blp:16 src/window/translations.rs:413
@@ -410,7 +419,7 @@ msgstr ""
 msgid "Previous Verse"
 msgstr ""
 
-#: data/ui/window.blp:470 data/ui/window.blp:481 src/window/read_aloud.rs:424
+#: data/ui/window.blp:470 data/ui/window.blp:481 src/window/read_aloud.rs:431
 msgid "Pause"
 msgstr ""
 
@@ -622,15 +631,15 @@ msgstr ""
 msgid "Read aloud is not available in {language}"
 msgstr ""
 
-#: src/window/read_aloud.rs:303
+#: src/window/read_aloud.rs:310
 msgid "Could not read this verse aloud"
 msgstr ""
 
-#: src/window/read_aloud.rs:339
+#: src/window/read_aloud.rs:346
 msgid "Could not play the audio"
 msgstr ""
 
-#: src/window/read_aloud.rs:422
+#: src/window/read_aloud.rs:429
 msgid "Resume"
 msgstr ""
 
