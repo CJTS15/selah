@@ -69,6 +69,10 @@
       <default>true</default>
       <summary>Show verse numbers in the reader</summary>
     </key>
+    <key name="daily-verse" type="b">
+      <default>true</default>
+      <summary>Show the verse of the day at the top of the sidebar</summary>
+    </key>
     <key name="show-deuterocanon" type="b">
       <default>true</default>
       <summary>Show the Deuterocanon in translations that include it</summary>

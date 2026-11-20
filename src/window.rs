@@ -13,6 +13,8 @@ use selah_core::user::{Annotation, Filter, Ref, UserDb};
 use crate::config;
 
 mod catalog;
+mod daily;
+mod notes;
 mod preferences;
 mod saved;
 mod search;
@@ -65,6 +67,12 @@ mod imp {
         pub zoom_label: TemplateChild<gtk::Label>,
         #[template_child]
         pub book_filter: TemplateChild<gtk::SearchEntry>,
+        #[template_child]
+        pub daily_card: TemplateChild<gtk::Button>,
+        #[template_child]
+        pub daily_reference: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub daily_text: TemplateChild<gtk::Label>,
         #[template_child]
         pub book_scroller: TemplateChild<gtk::ScrolledWindow>,
         #[template_child]
@@ -138,6 +146,10 @@ mod imp {
         pub catalog: RefCell<catalog::CatalogState>,
         /// HTTP session, created on first use.
         pub http: OnceCell<soup::Session>,
+        /// Verse to keep at the top when the open chapter is drawn again.
+        pub keep_in_view: Cell<Option<u32>>,
+        /// Today's verse in the open translation, once loaded.
+        pub daily_verse: RefCell<Option<Ref>>,
     }
 
     #[glib::object_subclass]
@@ -215,6 +227,8 @@ mod imp {
             obj.setup_verse_actions();
             obj.setup_saved();
             obj.setup_preferences();
+            obj.setup_notes();
+            obj.setup_daily_verse();
             obj.update_navigation();
 
             self.split_view.connect_collapsed_notify(glib::clone!(
@@ -513,6 +527,11 @@ impl SelahWindow {
             body.set_family(Some(family));
             body.set_line_height(line_height);
         }
+        // The verse of the day reads like the reader: same face and spacing.
+        let attrs = pango::AttrList::new();
+        attrs.insert(pango::AttrString::new_family(family));
+        attrs.insert(pango::AttrFloat::new_line_height(f64::from(line_height)));
+        self.imp().daily_text.set_attributes(Some(&attrs));
     }
 
     fn zoom(&self) -> f64 {
@@ -1001,6 +1020,7 @@ impl SelahWindow {
             None => self.resume(),
         }
         self.refresh_saved();
+        self.load_daily_verse();
         if imp.content_stack.visible_child_name().as_deref() == Some("search") {
             self.run_search();
         }
@@ -1124,6 +1144,7 @@ impl SelahWindow {
         let mut first_line = true;
         let numbers = self.settings().boolean("verse-numbers");
         let one_per_line = self.settings().string("verse-layout") == "lines";
+        let notes = self.note_verses(content);
         // Character offsets of the requested verses, for selection.
         let mut selection: Option<(i32, i32)> = None;
         let mut ranges = Vec::with_capacity(content.verses.len());
@@ -1162,6 +1183,12 @@ impl SelahWindow {
                 buffer.insert(&mut end, "\u{2009}");
             }
             buffer.insert(&mut end, &verse.text);
+            if notes.contains(&verse.verse) {
+                buffer.insert(&mut end, "\u{2009}");
+                let anchor = buffer.create_child_anchor(&mut end);
+                imp.text_view
+                    .add_child_at_anchor(&self.note_mark(verse.verse), &anchor);
+            }
             ranges.push((verse.verse, verse_start, end.offset()));
             if let Some((first, last)) = verses
                 && (first..=last).contains(&verse.verse)
@@ -1196,8 +1223,48 @@ impl SelahWindow {
                     .scroll_to_mark(&buffer.get_insert(), 0.0, true, 0.0, 0.2);
                 imp.text_view.grab_focus();
             }
-            None => imp.scrolled.vadjustment().set_value(0.0),
+            None => match imp.keep_in_view.take().and_then(|v| self.verse_range(v)) {
+                // Redrawn in place: scroll back to the verse that was at the top.
+                Some((start, _)) => {
+                    let iter = buffer.iter_at_offset(start);
+                    // The cursor goes there too: GTK scrolls to it when focus returns.
+                    buffer.place_cursor(&iter);
+                    // A named mark survives until GTK scrolls after the new layout.
+                    let mark = match buffer.mark("anchor") {
+                        Some(mark) => {
+                            buffer.move_mark(&mark, &iter);
+                            mark
+                        }
+                        None => buffer.create_mark(Some("anchor"), &iter, true),
+                    };
+                    imp.text_view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.0);
+                }
+                None => imp.scrolled.vadjustment().set_value(0.0),
+            },
         }
+    }
+
+    /// The small button after a verse with a note, which opens the note.
+    fn note_mark(&self, verse: u32) -> gtk::Button {
+        let button = gtk::Button::builder()
+            .icon_name("document-edit-symbolic")
+            .tooltip_text(gettext("Note"))
+            .valign(gtk::Align::Center)
+            .css_classes(["flat", "circular", "note-mark"])
+            // Taking focus on click would make the text view scroll to its cursor.
+            .focus_on_click(false)
+            .build();
+        if let Some(title) = self.verse_title(verse) {
+            // Translators: accessible label of the note mark; {reference} is a verse.
+            let label = gettext("Note on {reference}").replace("{reference}", &title);
+            button.update_property(&[gtk::accessible::Property::Label(&label)]);
+        }
+        button.connect_clicked(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            move |_| win.open_note_dialog(verse)
+        ));
+        button
     }
 
     fn show_error(&self, message: &str) {

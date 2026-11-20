@@ -87,7 +87,7 @@ impl SelahWindow {
     }
 
     /// Draws the open chapter again, keeping the verse at the top in view.
-    fn rerender_chapter(&self) {
+    pub(super) fn rerender_chapter(&self) {
         let imp = self.imp();
         let Some((index, chapter)) = imp.current.get() else {
             return;
@@ -110,20 +110,8 @@ impl SelahWindow {
                     .find(|(_, _, end)| *end >= offset)
                     .map(|(verse, _, _)| *verse)
             });
+        imp.keep_in_view.set(top);
         self.show_chapter(&book, chapter, &content, None);
-        if let Some((start, _)) = top.and_then(|verse| self.verse_range(verse)) {
-            let buffer = text_view.buffer();
-            let iter = buffer.iter_at_offset(start);
-            // A named mark survives until GTK scrolls after the new layout.
-            let mark = match buffer.mark("anchor") {
-                Some(mark) => {
-                    buffer.move_mark(&mark, &iter);
-                    mark
-                }
-                None => buffer.create_mark(Some("anchor"), &iter, true),
-            };
-            text_view.scroll_to_mark(&mark, 0.0, true, 0.0, 0.0);
-        }
     }
 
     fn show_preferences(&self) {
@@ -160,6 +148,7 @@ impl SelahWindow {
         );
         for (key, row) in [
             ("verse-numbers", "verse_numbers_row"),
+            ("daily-verse", "daily_verse_row"),
             ("show-deuterocanon", "deuterocanon_row"),
             ("search-whole-words", "whole_words_row"),
         ] {

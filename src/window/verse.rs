@@ -232,6 +232,13 @@ impl SelahWindow {
         if text_view.buffer().has_selection() {
             return;
         }
+        // A click on a note mark (a button inside the text) is the button's own.
+        if text_view
+            .pick(x, y, gtk::PickFlags::DEFAULT)
+            .is_some_and(|w| w.ancestor(gtk::Button::static_type()).is_some())
+        {
+            return;
+        }
         // Truncation is fine: buffer coordinates are whole pixels.
         let (bx, by) =
             text_view.window_to_buffer_coords(gtk::TextWindowType::Widget, x as i32, y as i32);
@@ -262,7 +269,7 @@ impl SelahWindow {
     }
 
     /// The active verse, if it is still exactly what is selected.
-    fn active_verse(&self) -> Option<u32> {
+    pub(super) fn active_verse(&self) -> Option<u32> {
         let verse = self.imp().active_verse.get()?;
         let (start, end) = self.verse_range(verse)?;
         let (a, b) = self.imp().text_view.buffer().selection_bounds()?;
@@ -289,7 +296,7 @@ impl SelahWindow {
     }
 
     /// "John 3:16" for a verse of the open chapter, as this translation numbers it.
-    fn verse_title(&self, verse: u32) -> Option<String> {
+    pub(super) fn verse_title(&self, verse: u32) -> Option<String> {
         let imp = self.imp();
         let (book, chapter) = imp.current.get()?;
         let name = imp.books.borrow().get(book)?.name.clone();
@@ -324,9 +331,18 @@ impl SelahWindow {
         };
         // Verses without a canonical reference can be copied but not saved.
         let reference = self.canonical_ref(Some(verse));
-        for action in ["highlight", "bookmark-verse", "remove-highlight"] {
+        for action in [
+            "highlight",
+            "bookmark-verse",
+            "remove-highlight",
+            "edit-note",
+        ] {
             self.set_action_enabled(action, reference.is_some());
         }
+        let has_note = reference
+            .as_ref()
+            .and_then(|r| self.with_db(|db| db.note_of(r)).flatten())
+            .is_some();
         let colour = reference
             .as_ref()
             .and_then(|r| self.with_db(|db| db.highlight_of(r)).flatten());
@@ -339,9 +355,9 @@ impl SelahWindow {
         }
 
         if imp.split_view.is_collapsed() {
-            self.show_verse_sheet(&title, colour.is_some(), bookmarked);
+            self.show_verse_sheet(&title, colour.is_some(), bookmarked, has_note);
         } else {
-            self.show_verse_popover(&title, verse, colour.is_some(), bookmarked);
+            self.show_verse_popover(&title, verse, colour.is_some(), bookmarked, has_note);
         }
     }
 
@@ -395,7 +411,14 @@ impl SelahWindow {
             .build()
     }
 
-    fn show_verse_popover(&self, title: &str, verse: u32, highlighted: bool, bookmarked: bool) {
+    fn show_verse_popover(
+        &self,
+        title: &str,
+        verse: u32,
+        highlighted: bool,
+        bookmarked: bool,
+        has_note: bool,
+    ) {
         let imp = self.imp();
         let content = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
@@ -429,6 +452,16 @@ impl SelahWindow {
             Some("<Control>c"),
             "win.copy-verse",
         ));
+        let note = if has_note {
+            gettext("Edit Note…")
+        } else {
+            gettext("Add Note…")
+        };
+        content.append(&Self::menu_button(
+            &note,
+            Some("<Control>n"),
+            "win.edit-note",
+        ));
         if highlighted {
             content.append(&Self::menu_button(
                 &gettext("Remove Highlight"),
@@ -451,6 +484,10 @@ impl SelahWindow {
         shortcuts.add_shortcut(gtk::Shortcut::new(
             gtk::ShortcutTrigger::parse_string("<Control>d"),
             Some(gtk::NamedAction::new("win.bookmark-verse")),
+        ));
+        shortcuts.add_shortcut(gtk::Shortcut::new(
+            gtk::ShortcutTrigger::parse_string("<Control>n"),
+            Some(gtk::NamedAction::new("win.edit-note")),
         ));
         popover.add_controller(shortcuts);
         popover.connect_closed(glib::clone!(
@@ -484,7 +521,7 @@ impl SelahWindow {
         ))
     }
 
-    fn show_verse_sheet(&self, title: &str, highlighted: bool, bookmarked: bool) {
+    fn show_verse_sheet(&self, title: &str, highlighted: bool, bookmarked: bool, has_note: bool) {
         let imp = self.imp();
         let content = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
@@ -538,6 +575,16 @@ impl SelahWindow {
                 true,
             ),
             (
+                "document-edit-symbolic",
+                if has_note {
+                    gettext("Edit Note")
+                } else {
+                    gettext("Note")
+                },
+                "win.edit-note",
+                true,
+            ),
+            (
                 "user-trash-symbolic",
                 gettext("Remove"),
                 "win.remove-highlight",
@@ -564,7 +611,7 @@ impl SelahWindow {
         imp.verse_sheet.set_open(true);
     }
 
-    fn close_verse_actions(&self) {
+    pub(super) fn close_verse_actions(&self) {
         let imp = self.imp();
         if let Some(popover) = imp.verse_popover.borrow().as_ref() {
             popover.popdown();

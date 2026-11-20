@@ -3,6 +3,7 @@
 
 pub mod books;
 pub mod catalog;
+pub mod daily;
 pub mod import;
 pub mod refs;
 pub mod store;

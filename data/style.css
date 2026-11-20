@@ -94,3 +94,15 @@
 .verse-actions button {
   font-weight: normal;
 }
+
+/* The note mark after a verse: an icon button that fits within the line. */
+.note-mark {
+  min-width: 0;
+  min-height: 0;
+  padding: 0 3px;
+}
+
+/* Verse of the day: face and line spacing come from the reader's settings. */
+.daily-text {
+  font-size: 1.1em;
+}
