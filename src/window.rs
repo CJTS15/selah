@@ -347,6 +347,12 @@ fn find_translations() -> Result<Vec<TranslationInfo>, selah_core::Error> {
     Ok(found)
 }
 
+/// A toast whose title is plain text: titles carry translation names, which
+/// come from imported packages, and toasts parse markup by default.
+fn plain_toast(title: &str) -> adw::Toast {
+    adw::Toast::builder().title(title).use_markup(false).build()
+}
+
 /// The verse number as shown: "16", or "15–16" for a combined verse.
 fn verse_label(verse: &Verse) -> String {
     match verse.verse_end {
@@ -831,7 +837,8 @@ impl SelahWindow {
         let imp = self.imp();
         let menu = gio::Menu::new();
         for info in &found {
-            let item = gio::MenuItem::new(Some(&info.name), None);
+            // Menu labels treat `_` as a mnemonic marker; keep names literal.
+            let item = gio::MenuItem::new(Some(&info.name.replace('_', "__")), None);
             item.set_action_and_target_value(Some("win.translation"), Some(&info.id.to_variant()));
             menu.append_item(&item);
         }

@@ -141,8 +141,14 @@ fn install_package(
         fs::rename(&rebuilt, &target).map_err(io_error)?;
         Ok(Installed { id, name, replaced })
     })();
-    let _ = fs::remove_file(&unpacked);
-    let _ = fs::remove_file(&rebuilt);
+    // SQLite may add -wal/-shm files next to a WAL-mode package it opened.
+    for path in [&unpacked, &rebuilt] {
+        for suffix in ["", "-wal", "-shm", "-journal"] {
+            let mut name = path.clone().into_os_string();
+            name.push(suffix);
+            let _ = fs::remove_file(name);
+        }
+    }
     result
 }
 
@@ -345,6 +351,7 @@ impl SelahWindow {
         .replace("{name}", &installed.name);
         let toast = adw::Toast::builder()
             .title(title)
+            .use_markup(false)
             .button_label(gettext("Open"))
             .action_name("win.translation")
             .action_target(&installed.id.to_variant())
@@ -417,7 +424,7 @@ impl SelahWindow {
             }
         }
         .replace("{name}", &info.name);
-        self.translations_toast(adw::Toast::new(&title));
+        self.translations_toast(plain_toast(&title));
         self.reload_translations();
     }
 }
@@ -483,6 +490,11 @@ mod tests {
 
     /// A gzip package of a one-verse translation with the given id.
     fn package(id: &str) -> Vec<u8> {
+        package_with(id, None)
+    }
+
+    /// Like [`package`], after running `sql` on the database with the sqlite3 tool.
+    fn package_with(id: &str, sql: Option<&str>) -> Vec<u8> {
         use selah_core::import::{parse_meta, parse_usfm};
 
         let db = temp_path(&format!("{id}-source.sqlite"));
@@ -492,6 +504,15 @@ mod tests {
         .unwrap();
         let books = vec![parse_usfm("\\id JHN\n\\c 3\n\\v 16 For God so loved.\n").unwrap()];
         store::create(&db, &meta, &books, &Vec::new()).unwrap();
+        if let Some(sql) = sql {
+            let status = Command::new("sqlite3")
+                .arg(&db)
+                .arg(sql)
+                .output()
+                .unwrap()
+                .status;
+            assert!(status.success());
+        }
         let bytes = gzip(&fs::read(&db).unwrap());
         let _ = fs::remove_file(db);
         bytes
@@ -531,6 +552,9 @@ mod tests {
                 .unwrap()
                 .replaced
         );
+        // A WAL database must not leave -wal or -shm files behind.
+        let wal = package_with("test-one", Some("PRAGMA journal_mode=WAL;"));
+        assert!(install_bytes(&dir, "wal", &wal).unwrap().replaced);
 
         assert!(matches!(
             install_bytes(&dir, "builtin", &package("eng-kjv")),

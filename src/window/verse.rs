@@ -66,7 +66,7 @@ impl SelahWindow {
     }
 
     pub(super) fn toast(&self, title: &str) {
-        self.imp().toast_overlay.add_toast(adw::Toast::new(title));
+        self.imp().toast_overlay.add_toast(plain_toast(title));
     }
 
     pub(super) fn setup_verse_actions(&self) {
