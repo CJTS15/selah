@@ -92,7 +92,12 @@ pub fn import_dir(dir: &Path) -> Result<(Meta, Vec<Book>, Mapping), Error> {
 
     let mut books = Vec::with_capacity(paths.len());
     for path in paths {
-        let book = parse_usfm(&fs::read_to_string(&path)?).map_err(|err| match err {
+        let src = fs::read_to_string(&path)?;
+        // Front matter, introductions, glossaries and the like are not scripture.
+        if book_id(&src).is_some_and(books::is_peripheral) {
+            continue;
+        }
+        let book = parse_usfm(&src).map_err(|err| match err {
             Error::Usfm { line, message } => Error::Usfm {
                 line,
                 message: format!("{}: {message}", path.display()),
@@ -109,6 +114,12 @@ pub fn import_dir(dir: &Path) -> Result<(Meta, Vec<Book>, Mapping), Error> {
     };
     versification::check_mapping(&books, &mapping)?;
     Ok((meta, books, mapping))
+}
+
+/// The id after `\id`, as the parser reads it.
+fn book_id(src: &str) -> Option<&str> {
+    let at = src.find("\\id")?;
+    src[at + 3..].split_whitespace().next()
 }
 
 pub fn parse_meta(src: &str) -> Result<Meta, Error> {
@@ -243,6 +254,8 @@ impl Parser {
             // Speaker labels (`\sp Beloved`, Song of Songs) are editorial and
             // often fall mid-verse, so they are dropped too.
             "cl" | "cp" | "sp" => {}
+            // Parallel passage references under headings (`\r (Mark 1:1-8)`).
+            "r" | "mr" => self.target = Target::Ignore,
             "c" => {
                 self.end_chapter();
                 self.chapter = parse_number(rest.trim(), "chapter")?;
@@ -283,7 +296,7 @@ impl Parser {
                 self.append(text);
             }
             "p" | "m" | "b" | "nb" | "pi" | "pi1" | "pi2" | "mi" | "pc" | "q" | "q1" | "q2"
-            | "q3" | "li" | "li1" | "li2" => {
+            | "q3" | "li" | "li1" | "li2" | "pmo" | "qr" | "qc" => {
                 self.pending_para = true;
                 if self.target == Target::Heading
                     || (self.target == Target::Ignore && self.chapter > 0)
@@ -293,7 +306,8 @@ impl Parser {
                 self.append(rest);
             }
             "d" => self.start_heading(HeadingKind::Title, rest),
-            "s" | "s1" | "s2" | "s3" | "ms" | "ms1" | "ms2" => {
+            // `\qa` is an acrostic heading such as "Aleph" in Psalm 119.
+            "s" | "s1" | "s2" | "s3" | "ms" | "ms1" | "ms2" | "qa" => {
                 self.start_heading(HeadingKind::Section, rest)
             }
             "f" | "fe" | "x" => self.skipping = true,
@@ -533,6 +547,29 @@ mod tests {
             ]
         );
         assert!(book.headings.is_empty(), "{:?}", book.headings);
+    }
+
+    #[test]
+    fn references_and_poetry_markers() {
+        let src = r"\id PSA
+\c 119
+\s1 Your Word Is a Lamp
+\r (John 1:1-5)
+\qa Aleph
+\q1
+\v 1 Blessed are they
+\qr whose way is blameless.
+\pmo
+\v 2 Blessed.
+";
+        let book = parse_usfm(src).unwrap();
+        let headings: Vec<_> = book.headings.iter().map(|h| h.text.as_str()).collect();
+        assert_eq!(headings, ["Your Word Is a Lamp", "Aleph"]);
+        assert_eq!(
+            book.verses[0].text,
+            "Blessed are they whose way is blameless."
+        );
+        assert!(book.verses[1].para);
     }
 
     #[test]

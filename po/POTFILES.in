@@ -4,6 +4,7 @@ data/ui/shortcuts-dialog.blp
 data/ui/translations-dialog.blp
 data/ui/window.blp
 src/window.rs
+src/window/catalog.rs
 src/window/saved.rs
 src/window/search.rs
 src/window/translations.rs

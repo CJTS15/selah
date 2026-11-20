@@ -48,6 +48,13 @@ const DEUTEROCANON: &[&str] = &[
     "LBA", "JUB", "ENO", "1MQ", "2MQ", "3MQ", "REP", "4BA", "LAO",
 ];
 
+/// USFM peripheral books: front and back matter, introductions, glossaries.
+const PERIPHERAL: &[&str] = &["FRT", "BAK", "OTH", "INT", "CNC", "GLO", "TDX", "NDX"];
+
+pub fn is_peripheral(id: &str) -> bool {
+    PERIPHERAL.contains(&id)
+}
+
 /// The section of a canonical book, or `None` for an unknown identifier.
 pub fn section(id: &str) -> Option<Section> {
     if OLD_TESTAMENT.contains(&id) {

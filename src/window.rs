@@ -12,6 +12,7 @@ use selah_core::user::{Annotation, Filter, Ref, UserDb};
 
 use crate::config;
 
+mod catalog;
 mod saved;
 mod search;
 mod translations;
@@ -130,6 +131,10 @@ mod imp {
         pub saved_generation: Cell<u64>,
         /// The open Translations dialog, refreshed when translations change.
         pub translations_dialog: RefCell<Option<translations::TranslationsDialog>>,
+        /// The online catalogue and downloads in progress.
+        pub catalog: RefCell<catalog::CatalogState>,
+        /// HTTP session, created on first use.
+        pub http: OnceCell<soup::Session>,
     }
 
     #[glib::object_subclass]
@@ -273,6 +278,8 @@ pub struct TranslationInfo {
     /// The language's own name if the metadata has one, else its code.
     pub language: String,
     pub licence: String,
+    /// Source date from the catalogue, such as `2026-10-30`; empty if unknown.
+    pub version: String,
     pub deuterocanon: bool,
     /// File size in bytes.
     pub size: u64,
@@ -326,6 +333,7 @@ fn find_translations() -> Result<Vec<TranslationInfo>, selah_core::Error> {
                         None => meta("language")?.unwrap_or_default(),
                     },
                     licence: meta("licence")?.unwrap_or_default(),
+                    version: meta("version")?.unwrap_or_default(),
                     deuterocanon: translation
                         .books()?
                         .iter()
