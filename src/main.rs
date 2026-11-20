@@ -55,6 +55,8 @@ fn main() -> glib::ExitCode {
     app.set_accels_for_action("win.preferences", &["<Control>comma"]);
     app.set_accels_for_action("win.edit-note", &["<Control>n"]);
     app.set_accels_for_action("win.read-aloud", &["<Control>p"]);
+    app.set_accels_for_action("win.read-previous", &["<Control><Shift>Page_Up"]);
+    app.set_accels_for_action("win.read-next", &["<Control><Shift>Page_Down"]);
     app.set_accels_for_action("win.search", &["<Control>f", "<Control>l"]);
     app.set_accels_for_action("win.zoom-reset", &["<Control>0", "<Control>KP_0"]);
 

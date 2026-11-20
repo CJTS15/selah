@@ -59,8 +59,19 @@ async fn synthesize(
 impl SelahWindow {
     pub(super) fn setup_read_aloud(&self) {
         self.add_action_entries([
+            // Ctrl+P and the menu: start or stop.
             gio::ActionEntry::builder("read-aloud")
-                .activate(|win: &Self, _, _| win.toggle_reading())
+                .activate(|win: &Self, _, _| {
+                    if win.imp().read_aloud.borrow().active {
+                        win.stop_reading();
+                    } else {
+                        win.start_reading(None);
+                    }
+                })
+                .build(),
+            // The play button and Space: pause or resume.
+            gio::ActionEntry::builder("read-pause")
+                .activate(|win: &Self, _, _| win.toggle_pause())
                 .build(),
             gio::ActionEntry::builder("read-from-here")
                 .activate(|win: &Self, _, _| {
@@ -79,6 +90,33 @@ impl SelahWindow {
                 .activate(|win: &Self, _, _| win.stop_reading())
                 .build(),
         ]);
+        // Space pauses and resumes while reading, unless something focused
+        // uses it first (buttons, rows) or it is typed into a text field.
+        let keys = gtk::EventControllerKey::new();
+        keys.connect_key_pressed(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            #[upgrade_or]
+            glib::Propagation::Proceed,
+            move |_, key, _, modifiers| {
+                let typing = gtk::prelude::GtkWindowExt::focus(&win).is_some_and(|w| {
+                    w.is::<gtk::Text>()
+                        || w.downcast_ref::<gtk::TextView>()
+                            .is_some_and(gtk::TextView::is_editable)
+                });
+                if key == gtk::gdk::Key::space
+                    && modifiers.is_empty()
+                    && !typing
+                    && win.imp().read_aloud.borrow().active
+                {
+                    win.toggle_pause();
+                    glib::Propagation::Stop
+                } else {
+                    glib::Propagation::Proceed
+                }
+            }
+        ));
+        self.add_controller(keys);
         // Created last, so the reading tint is drawn over highlights.
         self.imp()
             .text_view
@@ -114,14 +152,13 @@ impl SelahWindow {
         })
     }
 
-    /// Ctrl+P and the menu: start, pause or resume.
-    fn toggle_reading(&self) {
+    /// Pauses or resumes reading; does nothing when not reading.
+    fn toggle_pause(&self) {
         let (active, paused) = {
             let state = self.imp().read_aloud.borrow();
             (state.active, state.paused)
         };
         if !active {
-            self.start_reading(None);
             return;
         }
         let state = self.imp().read_aloud.borrow_mut();

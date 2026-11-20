@@ -31,8 +31,23 @@ Adw.ShortcutsDialog shortcuts_dialog {
     }
 
     Adw.ShortcutsItem {
-      title: _("Read Aloud, Pause or Resume");
+      title: _("Start or Stop Reading Aloud");
       action-name: "win.read-aloud";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Pause or Resume Reading");
+      accelerator: "space";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Previous Verse While Reading");
+      action-name: "win.read-previous";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Next Verse While Reading");
+      action-name: "win.read-next";
     }
 
     Adw.ShortcutsItem {
