@@ -1,7 +1,7 @@
 //! The search page: reference jumps, full-text results and recent searches.
 
 use selah_core::refs::{self, Reference};
-use selah_core::store::{MATCH_END, MATCH_START, Scope, SearchResults};
+use selah_core::store::{MATCH_END, MATCH_START, Scope, SearchOptions, SearchResults};
 
 use super::*;
 
@@ -183,6 +183,10 @@ impl SelahWindow {
             Some((books.get(r.book)?.id.clone(), r.chapter?, r.verses?.0))
         });
         let scope = self.scope();
+        let options = SearchOptions {
+            whole_words: self.settings().boolean("search-whole-words"),
+            hide_deuterocanon: !self.settings().boolean("show-deuterocanon"),
+        };
         let path = self.translation_path();
         glib::spawn_future_local(glib::clone!(
             #[weak(rename_to = win)]
@@ -199,7 +203,7 @@ impl SelahWindow {
                             .map(|v| v.text),
                         None => None,
                     };
-                    let results = translation.search(&text, &scope, RESULT_LIMIT)?;
+                    let results = translation.search(&text, &scope, RESULT_LIMIT, options)?;
                     Ok::<_, selah_core::Error>((preview, results))
                 })
                 .await;

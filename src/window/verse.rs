@@ -218,7 +218,7 @@ impl SelahWindow {
         ));
     }
 
-    fn verse_range(&self, verse: u32) -> Option<(i32, i32)> {
+    pub(super) fn verse_range(&self, verse: u32) -> Option<(i32, i32)> {
         self.imp()
             .verse_ranges
             .borrow()
@@ -711,8 +711,12 @@ impl SelahWindow {
                     continue;
                 };
                 if let Some((start, end)) = self.verse_range(*verse) {
-                    // The range starts with the verse number.
-                    let digits = i32::try_from(label.chars().count()).unwrap_or(0);
+                    // The range starts with the verse number, unless numbers are hidden.
+                    let digits = if self.settings().boolean("verse-numbers") {
+                        i32::try_from(label.chars().count()).unwrap_or(0)
+                    } else {
+                        0
+                    };
                     buffer.apply_tag_by_name(
                         "bookmarked",
                         &buffer.iter_at_offset(start),
