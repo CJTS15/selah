@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Request a translation
+    url: https://github.com/CJTS15/selah-catalog/issues
+    about: Bible translations in the catalogue are managed in the selah-catalog repository.

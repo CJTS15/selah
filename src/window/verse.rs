@@ -45,6 +45,13 @@ impl SelahWindow {
             Err(err) => {
                 glib::g_warning!("selah", "Could not open saved verses: {err}");
                 self.toast(&gettext("Saved verses are unavailable"));
+                // Not "Nothing Saved Yet": the saved verses may exist but cannot be read.
+                let empty = &self.imp().saved_empty;
+                empty.set_icon_name(Some("dialog-error-symbolic"));
+                empty.set_title(&gettext("Saved Verses Unavailable"));
+                empty.set_description(Some(&gettext(
+                    "Highlights, bookmarks and notes could not be opened",
+                )));
             }
         }
     }
@@ -78,12 +85,12 @@ impl SelahWindow {
         buffer.create_tag(Some("bookmarked-number"), &[("weight", &800_i32)]);
         self.apply_accent();
         let style = adw::StyleManager::default();
-        style.connect_accent_color_notify(glib::clone!(
+        style.connect_accent_color_notify(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.apply_accent()
         ));
-        style.connect_dark_notify(glib::clone!(
+        style.connect_dark_notify(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.apply_accent()
@@ -101,7 +108,7 @@ impl SelahWindow {
             Some(glib::VariantTy::STRING),
             &"".to_variant(),
         );
-        highlight.connect_activate(glib::clone!(
+        highlight.connect_activate(clone!(
             #[weak(rename_to = win)]
             self,
             move |action, param| {
@@ -116,7 +123,7 @@ impl SelahWindow {
 
         let bookmark_chapter =
             gio::SimpleAction::new_stateful("bookmark-chapter", None, &false.to_variant());
-        bookmark_chapter.connect_activate(glib::clone!(
+        bookmark_chapter.connect_activate(clone!(
             #[weak(rename_to = win)]
             self,
             move |action, _| {
@@ -149,7 +156,7 @@ impl SelahWindow {
                 .build(),
         ]);
 
-        imp.verse_sheet.connect_open_notify(glib::clone!(
+        imp.verse_sheet.connect_open_notify(clone!(
             #[weak(rename_to = win)]
             self,
             move |sheet| {
@@ -162,13 +169,13 @@ impl SelahWindow {
         // A plain click or tap on a verse opens its actions; drags still select text.
         let click = gtk::GestureClick::new();
         click.set_propagation_phase(gtk::PropagationPhase::Capture);
-        click.connect_released(glib::clone!(
+        click.connect_released(clone!(
             #[weak(rename_to = win)]
             self,
             move |_, presses, x, y| {
                 if presses == 1 {
                     // Let the text view finish its own click handling first.
-                    glib::idle_add_local_once(glib::clone!(
+                    glib::idle_add_local_once(clone!(
                         #[weak]
                         win,
                         move || win.verse_tapped(x, y)
@@ -181,7 +188,7 @@ impl SelahWindow {
         // Shift+F10 or the Menu key opens the actions for the verse at the caret.
         let keys = gtk::EventControllerKey::new();
         keys.set_propagation_phase(gtk::PropagationPhase::Capture);
-        keys.connect_key_pressed(glib::clone!(
+        keys.connect_key_pressed(clone!(
             #[weak(rename_to = win)]
             self,
             #[upgrade_or]
@@ -206,7 +213,7 @@ impl SelahWindow {
         imp.text_view.add_controller(keys);
 
         // Ctrl+C on a tapped verse copies it with its reference.
-        imp.text_view.connect_copy_clipboard(glib::clone!(
+        imp.text_view.connect_copy_clipboard(clone!(
             #[weak(rename_to = win)]
             self,
             move |text_view| {
@@ -495,7 +502,7 @@ impl SelahWindow {
             Some(gtk::NamedAction::new("win.edit-note")),
         ));
         popover.add_controller(shortcuts);
-        popover.connect_closed(glib::clone!(
+        popover.connect_closed(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.clear_verse_selection()
@@ -551,7 +558,7 @@ impl SelahWindow {
             .css_classes(["flat", "circular"])
             .build();
         close.update_property(&[gtk::accessible::Property::Label(&gettext("Close"))]);
-        close.connect_clicked(glib::clone!(
+        close.connect_clicked(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.imp().verse_sheet.set_open(false)

@@ -8,7 +8,21 @@
   <description>
     <p>
       Selah is a local-first Bible reader. It works offline from the first
-      launch and keeps your notes on your device.
+      launch and keeps your highlights, bookmarks and notes on your device.
+    </p>
+    <ul>
+      <li>King James Version and World English Bible built in</li>
+      <li>More openly licensed translations from the Selah catalogue, checked before they are installed</li>
+      <li>Search by words or go straight to a reference such as “Ps 23”</li>
+      <li>Highlights in five colours, bookmarks and notes, kept across translations</li>
+      <li>A verse of the day</li>
+      <li>Read aloud, verse by verse, in most languages</li>
+      <li>Comfortable reading: font, size, line spacing, verse layout, light and dark styles</li>
+      <li>Right-to-left translations, and a layout that fits phones</li>
+    </ul>
+    <p>
+      No account and no tracking. Selah only goes online to fetch the
+      translation catalogue and the translations you choose.
     </p>
   </description>
   <developer id="io.github.cjts15">
@@ -19,7 +33,45 @@
   <url type="homepage">https://github.com/CJTS15/selah</url>
   <url type="bugtracker">https://github.com/CJTS15/selah/issues</url>
   <url type="vcs-browser">https://github.com/CJTS15/selah</url>
+  <url type="contribute">https://github.com/CJTS15/selah/blob/main/CONTRIBUTING.md</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/CJTS15/selah/main/data/screenshots/reader.png</image>
+      <caption>Read with highlights, bookmarks and notes</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/CJTS15/selah/main/data/screenshots/search.png</image>
+      <caption>Search the whole Bible or one part of it</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/CJTS15/selah/main/data/screenshots/saved.png</image>
+      <caption>Find your highlights, bookmarks and notes again</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/CJTS15/selah/main/data/screenshots/translations.png</image>
+      <caption>Add openly licensed translations</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/CJTS15/selah/main/data/screenshots/read-aloud-dark.png</image>
+      <caption>Listen verse by verse, in light or dark style</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/CJTS15/selah/main/data/screenshots/reader-phone.png</image>
+      <caption>Fits phones and narrow windows</caption>
+    </screenshot>
+  </screenshots>
+  <branding>
+    <color type="primary" scheme_preference="light">#e8d5bf</color>
+    <color type="primary" scheme_preference="dark">#5e4229</color>
+  </branding>
   <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-20">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
   <requires>
     <display_length compare="ge">360</display_length>
   </requires>

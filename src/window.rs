@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gettextrs::{gettext, ngettext};
+// Bare `clone!`: xgettext skips strings inside path macros such as `glib::clone!`.
+use gtk::glib::clone;
 use gtk::{gio, glib, pango};
 use selah_core::books::Section;
 use selah_core::import::{HeadingKind, Verse};
@@ -103,6 +105,8 @@ mod imp {
         #[template_child]
         pub reader_stack: TemplateChild<gtk::Stack>,
         #[template_child]
+        pub saved_empty: TemplateChild<adw::StatusPage>,
+        #[template_child]
         pub scrolled: TemplateChild<gtk::ScrolledWindow>,
         #[template_child]
         pub text_view: TemplateChild<gtk::TextView>,
@@ -134,6 +138,8 @@ mod imp {
         /// First activatable row in the search results, for the Down key.
         pub first_result: RefCell<Option<gtk::ListBoxRow>>,
         pub translation_abbrev: RefCell<String>,
+        /// The open translation runs right to left; the UI keeps the system's direction.
+        pub text_rtl: Cell<bool>,
         /// Highlights and bookmarks; `None` if the user database could not open.
         pub user_db: RefCell<Option<UserDb>>,
         /// The chapter on screen, for copying verse text.
@@ -241,14 +247,14 @@ mod imp {
             obj.setup_read_aloud();
             obj.update_navigation();
 
-            self.split_view.connect_collapsed_notify(glib::clone!(
+            self.split_view.connect_collapsed_notify(clone!(
                 #[weak]
                 obj,
                 move |_| obj.update_sidebar_subtitle()
             ));
             // On narrow widths the book list is hidden while reading; bring the
             // current book into view whenever it is shown again.
-            self.split_view.connect_show_content_notify(glib::clone!(
+            self.split_view.connect_show_content_notify(clone!(
                 #[weak]
                 obj,
                 move |split_view| {
@@ -307,6 +313,8 @@ pub struct TranslationInfo {
     pub language: String,
     /// The metadata's language code, such as `eng`.
     pub language_code: String,
+    /// The text runs right to left (`direction=rtl` in the metadata).
+    pub rtl: bool,
     pub licence: String,
     /// Source date from the catalogue, such as `2026-10-30`; empty if unknown.
     pub version: String,
@@ -363,6 +371,7 @@ fn find_translations() -> Result<Vec<TranslationInfo>, selah_core::Error> {
                         None => meta("language")?.unwrap_or_default(),
                     },
                     language_code: meta("language")?.unwrap_or_default(),
+                    rtl: meta("direction")?.as_deref() == Some("rtl"),
                     licence: meta("licence")?.unwrap_or_default(),
                     version: meta("version")?.unwrap_or_default(),
                     deuterocanon: translation
@@ -582,24 +591,24 @@ impl SelahWindow {
     fn setup_book_list(&self) {
         let imp = self.imp();
         // Row 2n is book n; row 2n + 1 holds its chapter grid.
-        imp.book_list.set_filter_func(glib::clone!(
+        imp.book_list.set_filter_func(clone!(
             #[weak(rename_to = win)]
             self,
             #[upgrade_or]
             false,
             move |row| win.row_visible(row)
         ));
-        imp.book_list.set_header_func(glib::clone!(
+        imp.book_list.set_header_func(clone!(
             #[weak(rename_to = win)]
             self,
             move |row, before| win.update_header(row, before)
         ));
-        imp.book_list.connect_row_activated(glib::clone!(
+        imp.book_list.connect_row_activated(clone!(
             #[weak(rename_to = win)]
             self,
             move |_, row| win.toggle_book(row.index())
         ));
-        imp.book_filter.connect_search_changed(glib::clone!(
+        imp.book_filter.connect_search_changed(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| {
@@ -773,7 +782,7 @@ impl SelahWindow {
         let frames = Cell::new(0_u32);
         // Tick callbacks run once per frame and only while mapped, so this waits
         // for the first layout after startup or after the filter changed rows.
-        self.imp().book_list.add_tick_callback(glib::clone!(
+        self.imp().book_list.add_tick_callback(clone!(
             #[weak(rename_to = win)]
             self,
             #[upgrade_or]
@@ -864,7 +873,7 @@ impl SelahWindow {
             Some(glib::VariantTy::STRING),
             &"".to_variant(),
         );
-        action.connect_activate(glib::clone!(
+        action.connect_activate(clone!(
             #[weak(rename_to = win)]
             self,
             move |_, param| {
@@ -880,7 +889,7 @@ impl SelahWindow {
 
     /// Finds the translations again, after start-up, an import or a removal.
     pub(super) fn reload_translations(&self) {
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -947,10 +956,10 @@ impl SelahWindow {
         else {
             return;
         };
-        *imp.translation_id.borrow_mut() = info.id.clone();
+        let previous = imp.translation_id.replace(info.id.clone());
         let path = self.translation_path();
         let switched = place.is_some();
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -969,6 +978,13 @@ impl SelahWindow {
                 }
                 match result {
                     Ok(Ok((books, target))) => win.show_translation(&info, books, target, switched),
+                    // A failed switch keeps the translation on screen.
+                    Ok(Err(err)) if switched && !previous.is_empty() && previous != info.id => {
+                        glib::g_warning!("selah", "Could not open {}: {err}", info.id);
+                        *win.imp().translation_id.borrow_mut() = previous;
+                        // Translators: {name} is a translation name.
+                        win.toast(&gettext("Could not open {name}").replace("{name}", &info.name));
+                    }
                     Ok(Err(err)) => win.show_error(&err.to_string()),
                     Err(panic) => std::panic::resume_unwind(panic),
                 }
@@ -999,6 +1015,9 @@ impl SelahWindow {
         imp.reader_title.set_subtitle(&info.name);
         *imp.translation_name.borrow_mut() = info.name.clone();
         *imp.translation_abbrev.borrow_mut() = info.abbrev.clone();
+        imp.text_rtl.set(info.rtl);
+        imp.text_view.set_direction(self.text_direction());
+        imp.daily_text.set_direction(self.text_direction());
         self.update_sidebar_subtitle();
 
         imp.book_list.remove_all();
@@ -1056,6 +1075,15 @@ impl SelahWindow {
         }
     }
 
+    /// Text direction of the open translation, for widgets showing its text.
+    fn text_direction(&self) -> gtk::TextDirection {
+        if self.imp().text_rtl.get() {
+            gtk::TextDirection::Rtl
+        } else {
+            gtk::TextDirection::Ltr
+        }
+    }
+
     /// Opens a chapter by book id; false if the book is not in the list.
     fn open_chapter_by_id(&self, id: &str, chapter: u32, verses: Option<(u32, u32)>) -> bool {
         let index = self.imp().books.borrow().iter().position(|b| b.id == id);
@@ -1105,7 +1133,7 @@ impl SelahWindow {
 
         let path = self.translation_path();
         let id = book.id.clone();
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -1274,7 +1302,7 @@ impl SelahWindow {
             let label = gettext("Note on {reference}").replace("{reference}", &title);
             button.update_property(&[gtk::accessible::Property::Label(&label)]);
         }
-        button.connect_clicked(glib::clone!(
+        button.connect_clicked(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.open_note_dialog(verse)
@@ -1289,6 +1317,9 @@ impl SelahWindow {
         imp.error_page
             .set_description(Some(&glib::markup_escape_text(message)));
         imp.reader_stack.set_visible_child_name("error");
+        // Search and Saved fail on the same damaged file; show why.
+        imp.content_stack.set_visible_child_name("reading");
+        imp.split_view.set_show_content(true);
     }
 
     fn show_about(&self) {

@@ -250,7 +250,7 @@ impl SelahWindow {
         let expect = "defined in translations-dialog.blp";
         let dialog: adw::Dialog = builder.object("dialog").expect(expect);
         let language_filter: gtk::DropDown = builder.object("language_filter").expect(expect);
-        dialog.connect_closed(glib::clone!(
+        dialog.connect_closed(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| {
@@ -267,7 +267,7 @@ impl SelahWindow {
             language_filter: language_filter.clone(),
             available_rows: RefCell::default(),
         });
-        language_filter.connect_selected_notify(glib::clone!(
+        language_filter.connect_selected_notify(clone!(
             #[weak(rename_to = win)]
             self,
             move |_| win.refresh_available()
@@ -323,7 +323,7 @@ impl SelahWindow {
         chooser.open(
             Some(self),
             gio::Cancellable::NONE,
-            glib::clone!(
+            clone!(
                 #[weak(rename_to = win)]
                 self,
                 move |result| match result {
@@ -344,7 +344,7 @@ impl SelahWindow {
             .filter(|t| t.built_in)
             .map(|t| (t.id.clone(), t.name.clone()))
             .collect();
-        glib::spawn_future_local(glib::clone!(
+        glib::spawn_future_local(clone!(
             #[weak(rename_to = win)]
             self,
             async move {
@@ -418,7 +418,7 @@ impl SelahWindow {
         alert.set_close_response("cancel");
         alert.connect_response(
             None,
-            glib::clone!(
+            clone!(
                 #[weak(rename_to = win)]
                 self,
                 move |_, response| {
