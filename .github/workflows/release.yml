@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    name: Build the Flatpak bundle
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v6
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: build-aux/io.github.cjts15.Selah.json
+          bundle: selah.flatpak
+          artifact-name: selah-bundle
+          cache: false
+
+  release:
+    name: Publish the GitHub release
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          name: selah-bundle
+      - name: Check the version and extract the release notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          # The tag must match the Meson project version and have release notes.
+          grep -q "version: '$version'" meson.build || { echo "meson.build is not at $version"; exit 1; }
+          python3 build-aux/release-notes.py "$version" data/selah.metainfo.xml.in.in > notes.md
+          mv selah.flatpak "selah-$version-x86_64.flatpak"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" "selah-$VERSION-x86_64.flatpak" \
+            --title "Selah $VERSION" --notes-file notes.md --verify-tag
