@@ -61,7 +61,17 @@ Translations dialog and under **About Selah → Legal**.
 
 ## Install
 
-Selah is not on Flathub yet. Until it is, build it from source.
+Download the latest `selah-<version>-x86_64.flatpak` from
+[Releases](https://github.com/CJTS15/selah/releases), then install it. The
+first command adds Flathub, where the GNOME runtime comes from:
+
+```sh
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak install --user selah-<version>-x86_64.flatpak
+```
+
+Updates are not automatic yet: install each new release the same way.
+Selah is not on Flathub.
 
 ## Build from source
 

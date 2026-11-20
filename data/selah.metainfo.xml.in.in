@@ -68,7 +68,15 @@
   <releases>
     <release version="0.1.0" date="2026-11-20">
       <description>
-        <p>First release.</p>
+        <p>
+          The first release of Selah: read the King James Version and the
+          World English Bible offline, add openly licensed translations from
+          the Selah catalogue, and search by words or reference.
+        </p>
+        <p>
+          Highlight, bookmark and take notes on verses, start the day with a
+          verse of the day, and have chapters read aloud verse by verse.
+        </p>
       </description>
     </release>
   </releases>

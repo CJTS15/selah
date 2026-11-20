@@ -93,6 +93,18 @@ Flatpak.
   imperative ("Add …", "Fix …") of 72 characters or fewer. Keep
   refactoring separate from behaviour changes.
 
+## Releasing (maintainer)
+
+1. Set the new version in `meson.build` and both `Cargo.toml` files, then
+   update `Cargo.lock` and `build-aux/cargo-sources.json`.
+2. Add a `<release>` entry with notes to `data/selah.metainfo.xml.in.in`
+   and regenerate `po/selah.pot`.
+3. Merge to `main`, then tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+The Release workflow builds `build-aux/io.github.cjts15.Selah.json` and
+publishes a GitHub release with the Flatpak bundle and the metainfo notes.
+It stops if the tag does not match `meson.build` or has no notes.
+
 ## Licence
 
 By contributing, you agree that your contributions are licensed under the
