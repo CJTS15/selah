@@ -1,6 +1,7 @@
 //! The Translations dialog: installed translations, importing `.selah`
 //! packages and removing imported translations.
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -18,14 +19,20 @@ const MAX_UNPACKED: u64 = 256 * 1024 * 1024;
 
 #[derive(Debug)]
 pub struct TranslationsDialog {
-    dialog: adw::Dialog,
-    list: gtk::ListBox,
-    toasts: adw::ToastOverlay,
+    pub(super) dialog: adw::Dialog,
+    pub(super) list: gtk::ListBox,
+    pub(super) toasts: adw::ToastOverlay,
+    pub(super) available_stack: gtk::Stack,
+    pub(super) available_list: gtk::ListBox,
+    pub(super) available_message: gtk::Label,
+    pub(super) language_filter: gtk::DropDown,
+    /// Each Available row and its button, updated in place during downloads.
+    pub(super) available_rows: RefCell<HashMap<String, (adw::ActionRow, gtk::Button)>>,
 }
 
 /// Why an import failed, worded for the person importing.
 #[derive(Debug)]
-enum ImportError {
+pub(super) enum ImportError {
     NotPackage,
     TooLarge,
     BuiltIn(String),
@@ -34,7 +41,7 @@ enum ImportError {
 }
 
 impl ImportError {
-    fn message(&self) -> String {
+    pub(super) fn message(&self) -> String {
         match self {
             Self::NotPackage => {
                 gettext("The file is not a Selah translation package, or it is damaged.")
@@ -61,7 +68,7 @@ fn io_error(err: impl std::fmt::Display) -> ImportError {
 
 /// What an import installed.
 #[derive(Debug)]
-struct Installed {
+pub(super) struct Installed {
     id: String,
     name: String,
     replaced: bool,
@@ -103,7 +110,7 @@ fn unpack(file: &gio::File, out: &Path) -> Result<(), ImportError> {
 
 /// Unpacks and checks a package, then installs a rebuilt copy in `dir` as
 /// `<id>.sqlite`. Temporary files are removed whatever happens.
-fn install_package(
+pub(super) fn install_package(
     file: &gio::File,
     dir: &Path,
     built_in: &[(String, String)],
@@ -209,6 +216,7 @@ fn translation_row(info: &TranslationInfo) -> adw::ActionRow {
 
 impl SelahWindow {
     pub(super) fn setup_translation_actions(&self) {
+        self.setup_catalog_actions();
         self.add_action_entries([
             gio::ActionEntry::builder("translations")
                 .activate(|win: &Self, _, _| win.show_translations_dialog())
@@ -241,6 +249,7 @@ impl SelahWindow {
             gtk::Builder::from_resource("/io/github/cjts15/Selah/ui/translations-dialog.ui");
         let expect = "defined in translations-dialog.blp";
         let dialog: adw::Dialog = builder.object("dialog").expect(expect);
+        let language_filter: gtk::DropDown = builder.object("language_filter").expect(expect);
         dialog.connect_closed(glib::clone!(
             #[weak(rename_to = win)]
             self,
@@ -252,9 +261,20 @@ impl SelahWindow {
             dialog: dialog.clone(),
             list: builder.object("installed_list").expect(expect),
             toasts: builder.object("toasts").expect(expect),
+            available_stack: builder.object("available_stack").expect(expect),
+            available_list: builder.object("available_list").expect(expect),
+            available_message: builder.object("available_message").expect(expect),
+            language_filter: language_filter.clone(),
+            available_rows: RefCell::default(),
         });
+        language_filter.connect_selected_notify(glib::clone!(
+            #[weak(rename_to = win)]
+            self,
+            move |_| win.refresh_available()
+        ));
         self.refresh_translations_dialog();
         dialog.present(Some(self));
+        self.catalog_needed();
     }
 
     pub(super) fn refresh_translations_dialog(&self) {
@@ -267,6 +287,8 @@ impl SelahWindow {
         for info in imp.translations.borrow().iter() {
             dialog.list.append(&translation_row(info));
         }
+        // Installed versions decide what the Available group offers.
+        self.refresh_available();
     }
 
     /// Shows a toast in the Translations dialog if it is open, else in the window.
@@ -336,7 +358,7 @@ impl SelahWindow {
         ));
     }
 
-    fn installed(&self, installed: &Installed) {
+    pub(super) fn installed(&self, installed: &Installed) {
         // An update of the open translation: show the new text.
         if installed.replaced && *self.imp().translation_id.borrow() == installed.id {
             self.open_translation(&installed.id, Some(self.canonical_ref(None)));

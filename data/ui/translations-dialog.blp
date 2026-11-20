@@ -32,6 +32,74 @@ Adw.Dialog dialog {
             ]
           }
         }
+
+        // Filled from the online catalogue; nothing is fetched before this
+        // dialog opens.
+        Adw.PreferencesGroup {
+          title: _("Available");
+          description: _("Openly licensed texts from the Selah catalogue");
+
+          header-suffix: Box {
+            spacing: 6;
+
+            DropDown language_filter {
+              valign: center;
+              tooltip-text: _("Language");
+            }
+
+            Button {
+              icon-name: "view-refresh-symbolic";
+              tooltip-text: _("Refresh Catalogue");
+              valign: center;
+              action-name: "win.refresh-catalog";
+
+              styles [
+                "flat",
+              ]
+
+              accessibility {
+                label: _("Refresh Catalogue");
+              }
+            }
+          };
+
+          Stack available_stack {
+            vhomogeneous: false;
+
+            StackPage {
+              name: "loading";
+
+              child: Adw.Spinner {
+                height-request: 32;
+              };
+            }
+
+            StackPage {
+              name: "message";
+
+              child: Label available_message {
+                wrap: true;
+                xalign: 0;
+
+                styles [
+                  "dimmed",
+                ]
+              };
+            }
+
+            StackPage {
+              name: "list";
+
+              child: ListBox available_list {
+                selection-mode: none;
+
+                styles [
+                  "boxed-list",
+                ]
+              };
+            }
+          }
+        }
       };
     };
   };
