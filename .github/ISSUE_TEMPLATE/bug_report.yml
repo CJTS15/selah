@@ -1,0 +1,44 @@
+name: Bug report
+description: Something in Selah does not work as expected.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Psalm 23 in the King James Version
+        2. Tap verse 4
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Selah version
+      description: Shown in the main menu under About Selah.
+    validations:
+      required: true
+  - type: input
+    id: translation
+    attributes:
+      label: Translation
+      description: Which translation was open, if it matters.
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: Distribution and desktop, for example "Fedora 45, GNOME 51".
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Run `flatpak run io.github.cjts15.Selah` in a terminal, reproduce the problem and paste what it prints.
+      render: text
