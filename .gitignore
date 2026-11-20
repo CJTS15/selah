@@ -25,6 +25,7 @@ rustc-ice-*.txt
 
 # Local plans
 /docs/*
+!/docs/GNOME_APP_PLAYBOOK.md
 
 # Meson and Flatpak build output
 /_build/
